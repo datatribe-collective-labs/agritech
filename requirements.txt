@@ -1,0 +1,15 @@
+requests
+pandas
+psycopg2-binary
+sqlalchemy
+python-dotenv
+
+apache-airflow-providers-postgres==5.11.1
+
+dbt-core==1.7.19
+dbt-postgres==1.7.19
+
+pytest
+pytest-cov
+pytest-mock
+flake8

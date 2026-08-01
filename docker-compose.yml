@@ -1,0 +1,169 @@
+version: "3.9"
+
+volumes:
+  postgres_data:
+  airflow_db_data:
+
+networks:
+  planting_net:
+    driver: bridge
+
+services:
+
+  # =====================================================
+  # Planting Intelligence PostgreSQL
+  # =====================================================
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: planting
+      POSTGRES_PASSWORD: planting123
+      POSTGRES_DB: planting_db
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+
+    ports:
+      - "${PLANTING_DB_PORT:-5432}:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planting -d planting_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      - planting_net
+
+  # =====================================================
+  # Airflow Metadata Database
+  # =====================================================
+  airflow_postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow123
+      POSTGRES_DB: airflow_db
+
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      - planting_net
+
+  # =====================================================
+  # Airflow Initialisation
+  # =====================================================
+  airflow_init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@airflow_postgres/airflow_db
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+      --username admin
+      --password admin123
+      --firstname Admin
+      --lastname User
+      --role Admin
+      --email admin@example.com || true
+      "
+
+    networks:
+      - planting_net
+
+  # =====================================================
+  # Airflow Webserver
+  # =====================================================
+  airflow_webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+
+    restart: unless-stopped
+
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      airflow_init:
+        condition: service_completed_successfully
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@airflow_postgres/airflow_db
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: super-secret-key-change-me
+
+      PLANTING_DB_CONN: postgresql+psycopg2://planting:planting123@postgres/planting_db
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+
+    command: webserver
+
+    networks:
+      - planting_net
+
+  # =====================================================
+  # Airflow Scheduler
+  # =====================================================
+  airflow_scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+
+    restart: unless-stopped
+
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      airflow_init:
+        condition: service_completed_successfully
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@airflow_postgres/airflow_db
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      PLANTING_DB_CONN: postgresql+psycopg2://planting:planting123@postgres/planting_db
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+
+    command: scheduler
+
+    networks:
+      - planting_net
