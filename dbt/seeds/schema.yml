@@ -1,0 +1,37 @@
+version: 2
+
+seeds:
+  - name: companion_planting
+    description: >
+      Manually curated companion planting knowledge base.
+      Contains known beneficial, neutral, and antagonistic species pairs
+      with the mechanism that makes them complementary and the
+      evidence level supporting the relationship.
+      Loaded into Postgres by: dbt seed
+      Used by: int_companion_matrix
+
+    columns:
+      - name: species_a
+        description: First species in the pair.
+        tests:
+          - not_null
+
+      - name: species_b
+        description: Second species in the pair.
+        tests:
+          - not_null
+
+      - name: relationship
+        description: Nature of the relationship — beneficial, neutral, or antagonistic.
+        tests:
+          - not_null
+
+      - name: mechanism
+        description: Biological mechanism driving the relationship.
+        tests:
+          - not_null
+
+      - name: evidence_level
+        description: Quality of evidence — scientific, traditional, or anecdotal.
+        tests:
+          - not_null
