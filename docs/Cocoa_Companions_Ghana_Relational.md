@@ -180,13 +180,13 @@ CRIG tested cocoa alongside a mix of *Allanblackia parviflora*, *Ricinodendron h
 
 Obiri et al. set up participatory cocoa agroforestry trials with Atwima farmers, deliberately including seven indigenous trees: [S23]
 
-- *Khaya anthotheca*
-- *Pericopsis elata*
-- *Entandrophragma angolense*
-- *Entandrophragma utile*
-- *Tetrapleura tetraptera*
-- *Albizia adianthifolia*
-- *Newbouldia laevis*
+- Kwabako / Ahafo mahogany - *Khaya anthotheca*
+- Kokrodua - *Pericopsis elata*
+- Edinam / Tiama - *Entandrophragma angolense*
+- Sipo / Utile *Entandrophragma utile*
+- Prekese - *Tetrapleura tetraptera*
+- Pampena / flat-crown - *Albizia adianthifolia*
+- Sasamansa - *Newbouldia laevis*
 
 Plantain, cassava and other food crops were part of the same trial, reflecting how farmers actually work. [S23] The trial's main finding was a financial analysis of shaded cocoa, not a species-by-species test of agronomic performance — so these are best labelled **Ghana participatory trial trees**, not "proven best companions."
 
