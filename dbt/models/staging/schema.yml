@@ -1,0 +1,168 @@
+version: 2
+
+sources:
+  - name: planting_raw
+    description: Raw tables populated by the Airflow pipeline. Never modified by dbt.
+    schema: public
+    tables:
+      - name: plants
+        description: Plant occurrence records from GBIF.
+        columns:
+          - name: species
+            description: Species binomial name
+          - name: latitude
+            description: Decimal latitude of the observation
+          - name: longitude
+            description: Decimal longitude of the observation
+          - name: ingested_at
+            description: Timestamp when the Airflow pipeline wrote this row
+      - name: soil
+        description: Soil composition at 0-5cm depth from ISRIC SoilGrids.
+        columns:
+          - name: city
+            description: City name — join key across all tables
+          - name: phh2o_0_5cm
+            description: Soil pH multiplied by 10 (stored as integer by SoilGrids)
+      - name: weather
+        description: Current weather snapshot from OpenWeatherMap.
+        columns:
+          - name: city
+            description: City name — join key
+          - name: ingested_at
+            description: Fetch timestamp — used to pick the latest snapshot
+      - name: water
+        description: 7-day water forecast from Open-Meteo.
+        columns:
+          - name: city
+            description: City name — join key
+          - name: avg_daily_water_deficit_mm
+            description: ET0 minus precipitation — positive means irrigation needed
+      - name: nasa_climate
+        description: Daily climate history 2015-2024 from NASA POWER API.
+        columns:
+          - name: city
+            description: City name
+          - name: date
+            description: Observation date YYYY-MM-DD
+          - name: t2m
+            description: Temperature at 2m height in Celsius. -999 means missing.
+
+models:
+  - name: stg_plants
+    description: >
+      Cleaned and deduplicated plant occurrence records from GBIF.
+      One row per unique species observation at a coordinate.
+      Only includes records with valid coordinates and PRESENT status.
+    columns:
+      - name: plant_occurrence_id
+        description: Surrogate key hashed from species + lat + lon + date.
+        tests:
+          - not_null
+          - unique
+      - name: species
+        description: Species name — falls back to scientific_name if null. Some GBIF records only have genus-level identification.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: latitude
+        description: Decimal latitude in range -90 to +90.
+        tests:
+          - not_null
+      - name: longitude
+        description: Decimal longitude in range -180 to +180.
+        tests:
+          - not_null
+      - name: occurrence_status
+        description: Must be PRESENT — ABSENT records are filtered out.
+        tests:
+          - accepted_values:
+              values: ["PRESENT"]
+      - name: kingdom
+        description: Taxonomic kingdom — must always be Plantae.
+
+  - name: stg_soil
+    description: >
+      Cleaned soil data. pH conversion (divide by 10) happens here.
+      Adds soil_texture_class and nitrogen_deficient flag.
+      One row per city.
+    columns:
+      - name: city
+        description: City name — primary join key.
+        tests:
+          - not_null
+          - unique
+      - name: soil_ph
+        description: Actual soil pH 0-14. Converted from phh2o_0_5cm (pH x 10).
+      - name: clay_pct
+        description: Clay content as percentage (0-100).
+      - name: sand_pct
+        description: Sand content as percentage (0-100).
+      - name: soil_texture_class
+        description: Simplified soil texture classification.
+        tests:
+          - not_null
+      - name: nitrogen_deficient
+        description: TRUE if nitrogen < 1.0 g/kg — legume companion recommended.
+
+  - name: stg_weather
+    description: >
+      Latest weather snapshot per city. Adds heat_stress, frost_risk,
+      growing_conditions flags. One row per city.
+    columns:
+      - name: city
+        description: City name — join key.
+        tests:
+          - not_null
+          - unique
+      - name: temperature_c
+        description: Current air temperature in Celsius.
+      - name: humidity_pct
+        description: Relative humidity percentage 0-100.
+      - name: growing_conditions
+        description: Categorical temperature classification.
+        tests:
+          - not_null
+
+  - name: stg_water
+    description: >
+      7-day water balance per city. Adds water_deficit_mm,
+      irrigation_needed, water_stress_category, aridity_index.
+      One row per city.
+    columns:
+      - name: city
+        description: City name — join key.
+        tests:
+          - not_null
+          - unique
+      - name: water_deficit_mm
+        description: ET0 minus precipitation in mm/day. Positive = irrigation needed.
+      - name: water_stress_category
+        description: Severity of water deficit.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["none", "mild", "moderate", "severe", "unknown"]
+      - name: irrigation_needed
+        description: TRUE when ET0 exceeds precipitation.
+
+  - name: stg_nasa_climate
+    description: >
+      10-year daily climate history. All -999 sentinel values converted to NULL.
+      Adds is_frost_day, growing_degree_day, is_dry_day flags.
+      Materialised as a table due to ~197,000 rows.
+    columns:
+      - name: city
+        description: City name.
+        tests:
+          - not_null
+      - name: date
+        description: Observation date as DATE type.
+        tests:
+          - not_null
+      - name: temp_avg_c
+        description: Average daily temperature. NULL where NASA source was -999.
+      - name: solar_radiation_mj
+        description: Solar radiation in MJ/m2/day. NULL where NASA was -999.
+      - name: growing_degree_day
+        description: Daily GDD using base 10C. MAX(0, avg_temp - 10).

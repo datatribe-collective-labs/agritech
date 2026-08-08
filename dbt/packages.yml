@@ -1,0 +1,32 @@
+# dbt/packages.yml
+# =================
+# dbt packages are pre-built collections of macros and tests
+# you can use in your project — like pip packages but for dbt.
+#
+# Install with: dbt deps
+# This downloads packages into dbt_packages/ folder.
+# Add dbt_packages/ to .gitignore — it's generated, not source.
+
+packages:
+  # ── dbt-utils ────────────────────────────────────────────────
+  # The standard library of dbt. Provides:
+  #
+  #   Tests:
+  #     dbt_utils.not_constant        - column must not always be same value
+  #     dbt_utils.at_least_one        - at least one row must be non-null
+  #     dbt_utils.expression_is_true  - any SQL expression must be true
+  #     dbt_utils.unique_combination_of_columns - composite unique key test
+  #
+  #   Macros:
+  #     dbt_utils.generate_surrogate_key - creates a hashed ID from columns
+  #     dbt_utils.pivot                  - pivot rows to columns
+  #     dbt_utils.get_column_values      - get distinct values of a column
+  #     dbt_utils.union_relations        - union multiple tables safely
+  #
+  # We use it primarily for:
+  #   - unique_combination_of_columns on (city, date) in nasa models
+  #   - expression_is_true for business rule validation
+  #   - generate_surrogate_key for mart row identifiers
+
+  - package: dbt-labs/dbt_utils
+    version: [">=1.1.0", "<2.0.0"]
