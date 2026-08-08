@@ -2,7 +2,7 @@
 
 ## A note before the evidence
 
-What gets called "companion planting" or "permaculture" in much of the world today is, in West Africa and many other places, simply how people have related to land for generations — planting food, medicine, timber and shade together because they belong together, not because a design system said so. This document uses the language of "evidence" and "species" because it draws on published research and institutional records, and because Jana and DataTribe need something that holds up to scrutiny. But the underlying relationships it describes — cocoa growing in the company of Ofram, Odum, plantain, Gliricidia — are relational planting practiced by Ghanaian farmers long before "evidence-based" was a phrase anyone needed.
+What gets called "companion planting" or "permaculture" in much of the world today is, in West Africa and many other places, simply how people have related to land for generations — planting food, medicine, timber and shade together because they belong together, not because a design system said so. This document uses the language of "evidence" and "species" because it draws on published research and institutional records, and because this work needs to hold up to scrutiny. But the underlying relationships it describes — cocoa growing in the company of Ofram, Odum, plantain, Gliricidia — are relational planting practiced by Ghanaian farmers long before "evidence-based" was a phrase anyone needed.
 
 Local and Ghanaian names are given first throughout, with the Latin name in brackets as an identification reference only.
 
