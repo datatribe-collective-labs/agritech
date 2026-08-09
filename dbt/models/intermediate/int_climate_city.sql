@@ -119,6 +119,7 @@ SELECT
     -- 1000-2000 = broad range including maize, beans
     -- > 2000  = tropical crops viable (rice, cassava, cotton)
     -- VALIDATION NEEDED: https://www.dpird.wa.gov.au/
+    CASE    
         WHEN AVG(annual_gdd) < 1000   THEN 'cool_season_only'
         WHEN AVG(annual_gdd) < 2000   THEN 'mixed_season'
         ELSE                               'tropical_viable'
