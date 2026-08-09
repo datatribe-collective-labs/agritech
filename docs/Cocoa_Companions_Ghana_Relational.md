@@ -2,9 +2,15 @@
 
 ## A note before the evidence
 
-What gets called "companion planting" or "permaculture" in much of the world today is, in West Africa and many other places, simply how people have related to land for generations — planting food, medicine, timber and shade together because they belong together, not because a design system said so. This document uses the language of "evidence" and "species" because it draws on published research and institutional records, and because Jana and DataTribe need something that holds up to scrutiny. But the underlying relationships it describes — cocoa growing in the company of Ofram, Odum, plantain, Gliricidia — are relational planting practiced by Ghanaian farmers long before "evidence-based" was a phrase anyone needed.
+What gets called "companion planting" or "permaculture" in much of the world today is, in West Africa and many other places, simply how people have related to land for generations — planting food, medicine, timber and shade together because they belong together, not because a design system said so. This document uses the language of "evidence" and "species" because it draws on published research and institutional records, and because this work needs something that holds up to scrutiny. But the underlying relationships it describes — cocoa growing in the company of Ofram, Odum, plantain, Gliricidia — are relational planting practiced by Ghanaian farmers long before "evidence-based" was a phrase anyone needed.
+
+**A note on terms.** Across much of West and East Africa, growing several crops and trees together on the same land is commonly called **mixed planting** or **mixed farming** — that's the term used in the reviewed literature itself, alongside "cocoa agroforestry." This document also uses **relational planting**, because it centres the relationships between cocoa and its companions — what each gives and asks of the other — rather than reducing the practice to a list of species or a technical planting pattern.
 
 Local and Ghanaian names are given first throughout, with the Latin name in brackets as an identification reference only.
+
+**Where to look for what.** Sections 3–8 are the direct working material for relational/mixed/companion planting decisions — the relationships (§3), and the species themselves organised by role (§4–8). Sections 1, 2 and 9–13 are supporting background — where the evidence comes from, how canopy layers are structured, and how to weigh and record a decision — useful for going deeper, but not needed to find a specific tree.
+
+A small number of trees in §7.2, §8.1, §8.2 and §8.3 came into the original document under Latin name only. Their local Ghanaian names have been added here from separate botanical and ethnobotanical sources (Burkill's *Useful Plants of West Tropical Africa*, KNUST/Ghana ethnobotanical surveys, and related literature) — not from the [S1]–[S29] evidence base itself. Two species, *Cola chlamydantha* and *Canthium glabriflorum*, had no distinct Ghanaian vernacular name in the sources checked, so they're marked as such rather than guessed at.
 
 ## Scope and how the evidence is weighed
 
@@ -174,13 +180,13 @@ CRIG tested cocoa alongside a mix of *Allanblackia parviflora*, *Ricinodendron h
 
 Obiri et al. set up participatory cocoa agroforestry trials with Atwima farmers, deliberately including seven indigenous trees: [S23]
 
-- *Khaya anthotheca*
-- *Pericopsis elata*
-- *Entandrophragma angolense*
-- *Entandrophragma utile*
-- *Tetrapleura tetraptera*
-- *Albizia adianthifolia*
-- *Newbouldia laevis*
+- Kwabako / Ahafo mahogany - *Khaya anthotheca*
+- Kokrodua - *Pericopsis elata*
+- Edinam / Tiama - *Entandrophragma angolense*
+- Sipo / Utile *Entandrophragma utile*
+- Prekese - *Tetrapleura tetraptera*
+- Pampena / flat-crown - *Albizia adianthifolia*
+- Sasamansa - *Newbouldia laevis*
 
 Plantain, cassava and other food crops were part of the same trial, reflecting how farmers actually work. [S23] The trial's main finding was a financial analysis of shaded cocoa, not a species-by-species test of agronomic performance — so these are best labelled **Ghana participatory trial trees**, not "proven best companions."
 
@@ -188,22 +194,22 @@ Plantain, cassava and other food crops were part of the same trial, reflecting h
 
 These are **farmer observations**, unless a study specifically measured the trait. [S22]
 
-| Tree | What farmers report | What it suggests |
-|---|---|---|
-| *Albizia ferruginea* | Deep roots, light crown, timber | A strong candidate; root description is farmer-reported |
-| *Entandrophragma angolense* | Deep roots, high crown, valuable timber; crown can run dense | Good candidate, watch the shade density |
-| *Lophira alata* | Deep roots, high crown, timber | Strong crown and root candidate |
-| *Milicia excelsa* | High crown, valuable timber | Strong on canopy and economic value; other West African communities report pest concerns |
-| *Morinda lucida* | Deep roots, high crown, medicinal use | Multipurpose candidate |
-| *Newbouldia laevis* | Good early shade, narrow crown, medicinal use | Good fit for the establishment stage |
-| *Pycnanthus angolensis* | High crown, deep roots, brittle branches | Good on canopy and roots, watch mechanical risk |
-| *Ricinodendron heudelotii* | Deep roots, high but heavy crown, brittle branches | Multipurpose, but conditional |
-| *Terminalia ivorensis* | High, wide crown, timber; also described as relatively shallow-rooted | Strong on canopy, possible below-ground competition |
-| *Terminalia superba* | High, wide crown, timber | Strong candidate for the permanent upper canopy |
-| *Tetrapleura tetraptera* | Light crown, spice and medicinal value | Multipurpose candidate |
-| *Treculia africana* | Good early shade, shorter, deep roots | Possible fit for the establishment stage |
-| *Trema orientalis* | Good early shade, small tree | Possible fit for early/temporary shade |
-| *Spathodea campanulata* | Deep roots, high/wide crown, reported to keep soil moist | Worth watching for shade and moisture, needs local checking |
+| Local name | Latin name (reference only) | What farmers report | What it suggests |
+|---|---|---|---|
+| Awiemfosamina | *Albizia ferruginea* | Deep roots, light crown, timber | A strong candidate; root description is farmer-reported |
+| Edinam | *Entandrophragma angolense* | Deep roots, high crown, valuable timber; crown can run dense | Good candidate, watch the shade density |
+| Kaku | *Lophira alata* | Deep roots, high crown, timber | Strong crown and root candidate |
+| Odum | *Milicia excelsa* | High crown, valuable timber | Strong on canopy and economic value; other West African communities report pest concerns |
+| Konkroma | *Morinda lucida* | Deep roots, high crown, medicinal use | Multipurpose candidate |
+| Sesemasa | *Newbouldia laevis* | Good early shade, narrow crown, medicinal use | Good fit for the establishment stage |
+| Otie | *Pycnanthus angolensis* | High crown, deep roots, brittle branches | Good on canopy and roots, watch mechanical risk |
+| Njangsa | *Ricinodendron heudelotii* | Deep roots, high but heavy crown, brittle branches | Multipurpose, but conditional |
+| Emire | *Terminalia ivorensis* | High, wide crown, timber; also described as relatively shallow-rooted | Strong on canopy, possible below-ground competition |
+| Ofram | *Terminalia superba* | High, wide crown, timber | Strong candidate for the permanent upper canopy |
+| Prekese | *Tetrapleura tetraptera* | Light crown, spice and medicinal value | Multipurpose candidate |
+| African breadfruit (no distinct Ghanaian vernacular name found in the sources reviewed) | *Treculia africana* | Good early shade, shorter, deep roots | Possible fit for the establishment stage |
+| Osesea | *Trema orientalis* | Good early shade, small tree | Possible fit for early/temporary shade |
+| Kokonisuo | *Spathodea campanulata* | Deep roots, high/wide crown, reported to keep soil moist | Worth watching for shade and moisture, needs local checking |
 
 ---
 
@@ -211,12 +217,12 @@ These are **farmer observations**, unless a study specifically measured the trai
 
 ### 8.1 Trees with strong phytosanitary or historical warnings
 
-| Tree | What raises concern | How to hold it |
-|---|---|---|
-| *Cola chlamydantha* | Historically named CRIG-undesirable; named as a CSSV alternative host in extension material | A real disease caution — check current CSSVD guidance before including it [S7] |
-| *Ceiba pentandra* | Historically named CRIG-undesirable; documented CSSV alternative host; farmers report brittle branches, pest hosting, mechanical/logging risk | A real disease and mechanical caution [S7] [S22] |
-| *Cola gigantea* | Historically named CRIG-undesirable; ranked among the least beneficial in later Ghana literature; farmers report prolific regrowth, slow-breaking litter, dry/hard soil | A real caution depending on site and how it's managed [S7] [S22] |
-| *Musanga cecropioides* | Historically named CRIG-undesirable; ranked among the least beneficial; farmers report shallow roots, heavy water use, brittle branches | A clear Ghana caution [S7] [S22] |
+| Local name | Latin name (reference only) | What raises concern | How to hold it |
+|---|---|---|---|
+| Wild cola (no distinct Ghanaian vernacular name found in the sources reviewed) | *Cola chlamydantha* | Historically named CRIG-undesirable; named as a CSSV alternative host in extension material | A real disease caution — check current CSSVD guidance before including it [S7] |
+| Onyina | *Ceiba pentandra* | Historically named CRIG-undesirable; documented CSSV alternative host; farmers report brittle branches, pest hosting, mechanical/logging risk | A real disease and mechanical caution [S7] [S22] |
+| Watapuo | *Cola gigantea* | Historically named CRIG-undesirable; ranked among the least beneficial in later Ghana literature; farmers report prolific regrowth, slow-breaking litter, dry/hard soil | A real caution depending on site and how it's managed [S7] [S22] |
+| Odwuma | *Musanga cecropioides* | Historically named CRIG-undesirable; ranked among the least beneficial; farmers report shallow roots, heavy water use, brittle branches | A clear Ghana caution [S7] [S22] |
 
 CSSV host status needs careful reading. Modern reviews confirm wild forest hosts are biologically relevant to the virus's spread, though how important they are relative to cocoa-to-cocoa transmission is still unsettled. It helps to hold apart **confirmed host status**, **official removal guidance**, and **how much that host actually matters epidemiologically**, rather than treating them as one thing. [S13]
 
@@ -224,12 +230,12 @@ CSSV host status needs careful reading. Modern reviews confirm wild forest hosts
 
 The historical CRIG list also includes:
 
-- *Adansonia digitata*
-- *Blighia sapida*
-- *Canthium glabriflorum*
-- *Carapa procera*
-- *Lecaniodiscus cupanioides*
-- *Myrianthus arboreus*
+- Ɔdadeɛ — *Adansonia digitata*
+- Akye fufo — *Blighia sapida*
+- Wild cola (no distinct Ghanaian vernacular name found in the sources reviewed) — *Canthium glabriflorum*
+- Krupi — *Carapa procera*
+- Atwere — *Lecaniodiscus cupanioides*
+- Nyankama — *Myrianthus arboreus*
 
 These were named undesirable without a clear, species-specific reason given in the reviewed material. Best held honestly as:
 
@@ -241,15 +247,15 @@ No root, pest, allelopathy or water-use explanation should be invented for these
 
 The Atwima study recorded trees farmers found aggressive or a poor fit: [S22]
 
-| Tree | What farmers reported |
-|---|---|
-| *Ceiba pentandra* | Brittle branches; reported cocoa-pest host |
-| *Ficus exasperata* | Reported to draw too much water and nutrients |
-| *Lannea welwitschii* | Reported cocoa-pest host |
-| *Musanga cecropioides* | Shallow roots, heavy water use, brittle branches |
-| *Triplochiton scleroxylon* | High water demand, brittle branches, reported pest link |
-| *Bombax buonopozense* | Reported to cool and moisten soil, but held back over pest/disease links |
-| *Cola gigantea* | Held as a poor fit; farmers link it to dry, hard soil |
+| Local name | Latin name (reference only) | What farmers reported |
+|---|---|---|
+| Onyina | *Ceiba pentandra* | Brittle branches; reported cocoa-pest host |
+| Nyankyerene | *Ficus exasperata* | Reported to draw too much water and nutrients |
+| Kumanini | *Lannea welwitschii* | Reported cocoa-pest host |
+| Odwuma | *Musanga cecropioides* | Shallow roots, heavy water use, brittle branches |
+| Wawa | *Triplochiton scleroxylon* | High water demand, brittle branches, reported pest link |
+| Akonkodeɛ | *Bombax buonopozense* | Reported to cool and moisten soil, but held back over pest/disease links |
+| Watapuo | *Cola gigantea* | Held as a poor fit; farmers link it to dry, hard soil |
 
 This is documented Ghanaian farmer knowledge — not a current national "do not plant" list. [S22]
 
