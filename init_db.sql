@@ -1,5 +1,5 @@
--- This SQL file runs AUTOMATICALLY the very first time
--- the Postgres container starts (because we mount it into
+-- SQL runs AUTOMATICALLY the very first time
+-- the Postgres container starts (because it's being mounted onto
 -- /docker-entrypoint-initdb.d/).
 
 
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS plants (
 );
 
 
--- SOIL  (from ISRIC SoilGrids API)
+-- SOIL  (from graphql.isric.org API)
 CREATE TABLE IF NOT EXISTS soil (
     id              SERIAL PRIMARY KEY,
     city            TEXT,
