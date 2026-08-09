@@ -41,14 +41,14 @@ viable_species AS (
 )
 
 SELECT
-    -- ── Pair identity ─────────────────────────────────────────
+    -- Pair identity
     c.species_a,
     c.species_b,
     c.relationship,        -- 'beneficial', 'neutral', 'antagonistic'
     c.mechanism,           -- 'nitrogen_fixation', 'pest_repulsion', etc.
     c.evidence_level,      -- 'scientific', 'traditional', 'anecdotal'
 
-    -- ── Relationship strength score ───────────────────────────
+    -- Relationship strength score
     -- Higher = stronger documented benefit.
     -- evidence_level multiplies the base relationship score.
     CASE c.relationship
@@ -65,7 +65,7 @@ SELECT
         ELSE 1
     END                             AS relationship_score,
 
-    -- ── Mechanism category ────────────────────────────────────
+    -- Mechanism category
     -- Groups mechanisms into the four polyculture benefit types.
     -- Used by the AI explanation layer to describe WHY a pair works.
     CASE c.mechanism
@@ -79,7 +79,7 @@ SELECT
         ELSE                               'other'
     END                             AS benefit_category,
 
-    -- ── Viability flags ───────────────────────────────────────
+    -- Viability flags
     -- Is species_a found in our plant occurrence data?
     -- If not, we have no evidence it grows in any of our target locations.
     CASE WHEN va.species IS NOT NULL THEN TRUE ELSE FALSE END
@@ -94,12 +94,12 @@ SELECT
         ELSE FALSE
     END                             AS both_species_confirmed,
 
-    -- ── Observation counts ────────────────────────────────────
+    -- Observation counts
     -- More observations = more confidence the species actually thrives
     COALESCE(va.observation_count, 0) AS species_a_observations,
     COALESCE(vb.observation_count, 0) AS species_b_observations,
 
-    -- ── Seasonality compatibility ────────────────────────────
+    -- Seasonality compatibility
     -- Pairs work best when both species are active in the same season.
     -- Planting a warm-season crop with a cool-season crop means
     -- one will be dormant while the other is active.
