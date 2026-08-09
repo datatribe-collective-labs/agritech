@@ -1,5 +1,5 @@
 """
-All 5 fetches run in parallel, summary runs when all complete.
+All 5 fetches run in parallel, and summary runs when all complete.
 """
 
 import sys
