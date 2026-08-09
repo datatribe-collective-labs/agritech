@@ -1,0 +1,102 @@
+version: 2
+
+models:
+  - name: int_location_profile
+    description: >
+      Present-day environmental profile per city.
+      Joins stg_soil + stg_weather + stg_water on city name.
+      One row per city. Adds planting_suitability_score.
+    columns:
+      - name: city
+        description: City name — primary key.
+        tests:
+          - not_null
+          - unique
+      - name: planting_suitability_score
+        description: Composite score 0-100. Higher = better immediate planting conditions.
+        tests:
+          - not_null
+      - name: water_deficit_mm
+        description: Daily water deficit in mm. Positive = irrigation needed.
+      - name: irrigation_needed
+        description: Boolean. TRUE when ET0 exceeds precipitation.
+
+  - name: int_climate_history
+    description: >
+      10-year climate summary per city from NASA POWER data.
+      One row per city aggregated from ~3,650 daily rows each.
+    columns:
+      - name: city
+        description: City name — primary key.
+        tests:
+          - not_null
+          - unique
+      - name: climate_zone
+        description: Climate zone based on average annual frost days.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                [
+                  "tropical",
+                  "subtropical",
+                  "temperate",
+                  "continental",
+                  "subarctic",
+                ]
+      - name: gdd_crop_class
+        description: Growing degree day class for crop compatibility.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["cool_season_only", "mixed_season", "tropical_viable"]
+      - name: avg_annual_precip_mm
+        description: Average total annual precipitation across 10 years.
+      - name: years_of_data
+        description: Number of years with >= 300 days of NASA data.
+
+  - name: int_species_habitat
+    description: >
+      Ecological envelope per species from GBIF observations.
+      One row per species with >= 3 confirmed observations.
+    columns:
+      - name: species
+        description: Species name — primary key. NULL for genus-only GBIF records.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+          - unique
+      - name: observation_count
+        description: Total GBIF records for this species (minimum 3).
+      - name: seasonality_class
+        description: Dominant season of observation.
+        tests:
+          - accepted_values:
+              values: ["warm_season", "cool_season", "year_round", "unknown"]
+      - name: human_observation_ratio
+        description: Fraction of records from direct human observation (0-1).
+
+  - name: int_companion_matrix
+    description: >
+      Scored companion planting species pairs.
+      Joins companion_planting seed with int_species_habitat.
+      Excludes antagonistic pairs.
+    columns:
+      - name: relationship_score
+        description: Numeric score — relationship strength x evidence multiplier.
+      - name: benefit_category
+        description: Which polyculture benefit this pair provides.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                [
+                  "nutrient_sharing",
+                  "pest_disruption",
+                  "root_zone",
+                  "ground_cover",
+                  "other",
+                ]
+      - name: both_species_confirmed
+        description: TRUE when both species appear in GBIF occurrence data.

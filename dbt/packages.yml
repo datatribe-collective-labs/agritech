@@ -1,11 +1,4 @@
-# dbt/packages.yml
-# =================
-# dbt packages are pre-built collections of macros and tests
-# you can use in your project — like pip packages but for dbt.
-#
-# Install with: dbt deps
-# This downloads packages into dbt_packages/ folder.
-# Add dbt_packages/ to .gitignore — it's generated, not source.
+# dbt packages - pre-built collections of macros and tests
 
 packages:
   # ── dbt-utils ────────────────────────────────────────────────

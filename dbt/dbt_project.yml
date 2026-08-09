@@ -1,5 +1,3 @@
-# dbt/dbt_project.yml
-# ====================
 # The master configuration file for the entire dbt project.
 # dbt reads this file first whenever you run any dbt command.
 # Every setting here applies project-wide unless overridden
