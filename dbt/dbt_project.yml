@@ -1,86 +1,62 @@
 # The master configuration file for the entire dbt project.
-# dbt reads this file first whenever you run any dbt command.
-# Every setting here applies project-wide unless overridden
-# at the model level.
 
-# ── Project identity ─────────────────────────────────────────
-# name must match the folder name and be lowercase with underscores.
-# This name is used as the default schema prefix when dbt creates
-# views and tables in Postgres.
+# - Project identity
+
 name: agritech
 version: "1.0.0"
 
-# ── dbt version constraint ───────────────────────────────────
-# Prevents someone with an incompatible dbt version from
-# running this project and getting silent wrong results.
+# - dbt version constraint
+
 require-dbt-version: ">=1.7.0"
 
-# ── Which profile to use ─────────────────────────────────────
-# Refers to the name defined in profiles.yml (see below).
-# profiles.yml holds the actual database credentials.
-# Keeping them separate means dbt_project.yml can be committed
-# to git safely — profiles.yml stays local or in secrets.
+# - Profile
+# dbt uses the "profile" to connect to your data warehouse.
 profile: agritech
 
-# ── File paths ───────────────────────────────────────────────
+# - File paths
 # Tell dbt where to find each type of file.
-# All paths are relative to the dbt/ folder.
 model-paths: ["models"] # SQL transformation files
 seed-paths: ["seeds"] # CSV files loaded as tables
 test-paths: ["tests"] # custom singular SQL tests
 macro-paths: ["macros"] # reusable SQL snippets
 snapshot-paths: ["snapshots"] # slowly changing dimension snapshots
 
-# ── Where compiled SQL goes ───────────────────────────────────
-# dbt compiles your Jinja SQL into raw SQL before running it.
-# These folders hold the compiled output — never edit them directly.
+# - Where compiled SQL goes
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
-# ── MODEL CONFIGURATIONS ─────────────────────────────────────
-# This is where you define HOW each layer materialises in Postgres.
-#
-# Materialisation types:
-#   view        = a SQL view — no data stored, query runs on demand
-#                 Fast to build, slow to query. Good for staging.
-#   table       = a full physical table — data is stored
-#                 Slow to build, fast to query. Good for marts.
-#   incremental = only processes new rows since last run
-#                 Best for large tables like nasa_climate.
-#   ephemeral   = a CTE — never written to the DB, only used in
-#                 downstream models. Like a subquery with a name.
+# - MODEL CONFIGURATIONS
+# Defines how each layer materialises in Postgres.
 
 models:
   agritech:
-    # ── Staging layer ─────────────────────────────────────────
+    # - Staging layer
     # Views are perfect here:
     #   - Staging is just renaming and light cleaning
     #   - No one queries staging directly in production
-    #   - Views always reflect the latest raw data without a rebuild
-    #   - Fast to create during development
+
     staging:
       +materialized: view
 
       # Schema = which Postgres schema these models land in.
-      # 'staging' → dbt creates views in a schema called
+      # 'staging' == dbt creates views in a schema called
       # 'planting_intelligence_staging' (project name + schema).
       # Keeps raw, staging, and mart tables separated in the DB.
       +schema: staging
 
-      # Tags let you run only this layer: dbt run --select tag:staging
+      # Tags to run only this layer: dbt run --select tag:staging
       +tags: ["staging"]
 
-    # ── Intermediate layer ────────────────────────────────────
-    # Also views — intermediate models are stepping stones, not
-    # final outputs. They're only queried by downstream models,
+    # - Intermediate layer
+    # views — intermediate models. They're only queried by downstream models,
     # never by users or the ML model directly.
     intermediate:
       +materialized: view
       +schema: intermediate
       +tags: ["intermediate"]
 
-    # ── Marts layer ───────────────────────────────────────────
-    # Physical tables — the ML model queries these constantly.
+    # - Marts layer
+    # Physical tables == the ML model queries these constantly.
     # Tables are pre-computed so queries are fast.
     # The mart is rebuilt completely on every dbt run.
     marts:
@@ -88,9 +64,9 @@ models:
       +schema: marts
       +tags: ["marts"]
 
-    # ── Warehouse layer (star schema for analysts) ────────────
-    # Physical tables — analysts run ad-hoc queries directly here.
-    # Separate schema keeps it cleanly separated from marts.
+    # - Warehouse layer (star schema for analysts)
+    # Physical tables == analysts run ad-hoc queries directly here.
+    # Separate schema keeps it separated from marts.
     warehouse:
       +materialized: table
       +schema: warehouse
