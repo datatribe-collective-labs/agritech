@@ -76,7 +76,7 @@ SELECT
         ELSE                   'unknown'
     END                               AS water_retention_class,
 
-    -- Overall fertility score (0-5, for quick ranking) - VALIDATION REQUIRED
+    -- Overall fertility score (0-5 ranking) - VALIDATION REQUIRED
     -- Simple additive score for each positive soil attribute.
     (
         CASE WHEN nitrogen_g_kg >= 2.0 THEN 1 ELSE 0 END
