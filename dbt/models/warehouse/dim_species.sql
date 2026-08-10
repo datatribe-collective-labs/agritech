@@ -1,12 +1,8 @@
 -- Species dimension — joins GBIF habitat profiles with plant trait data.
 --
 -- GRAIN: one row per species.
--- SCD TYPE: 2 (via scd_species snapshot) — traits can be updated
---           as agronomic knowledge evolves.
---
--- This is the richest dimension — it combines:
---   int_species_habitat → where and when this species actually grows (observed)
---   dim_plant_traits    → biological characteristics (encoded domain knowledge)
+-- SCD TYPE: 2 (via scd_species snapshot)
+
 
 {{ config(materialized='table') }}
 
@@ -19,17 +15,17 @@ traits AS (
 )
 
 SELECT
-    -- ── Surrogate key ─────────────────────────────────────────
+    -- Surrogate key
     {{ dbt_utils.generate_surrogate_key(['COALESCE(habitat.species, traits.species)']) }}
                                             AS species_key,
 
-    -- ── Natural key ───────────────────────────────────────────
+    -- Natural key
     COALESCE(habitat.species, traits.species) AS species,
     traits.common_name,
     traits.family,
     traits.functional_group,
 
-    -- ── Agronomic traits (from dim_plant_traits seed) ─────────
+    -- Agronomic traits (from dim_plant_traits seed)
     traits.root_depth_class,
     traits.root_depth_cm_min,
     traits.root_depth_cm_max,
@@ -53,7 +49,7 @@ SELECT
     traits.days_to_maturity_max,
     traits.notes,
 
-    -- ── Observed habitat profile (from GBIF via int_species_habitat) ──
+    -- Observed habitat profile (from GBIF via int_species_habitat)
     habitat.observation_count,
     habitat.countries_observed,
     habitat.min_latitude,
@@ -66,9 +62,7 @@ SELECT
     habitat.primary_habitat,
     habitat.human_observation_ratio,
 
-    -- ── Polyculture role flags (derived for ML features) ──────
-    -- These are transparent, computed from the trait data above.
-    -- The ML model can use these as clean boolean features.
+    -- Polyculture role flags (derived for ML features)
 
     -- Is this species a good nitrogen provider for companions?
     CASE WHEN traits.nitrogen_role = 'fixer' THEN TRUE ELSE FALSE END
