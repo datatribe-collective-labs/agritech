@@ -68,14 +68,8 @@ SELECT
 
     -- Soil pH at the observation location (from dim_soil_condition)
     soil_dim.soil_ph,
-    soil_dim.ph_band,
-    soil_dim.nitrogen_band,
-    -- soil_dim.soil_texture_class,
+    -- soil_dim.soil_texture_class,,
     soil_dim.fertility_score,
-
-    -- Current water conditions at location
-    water_dim.water_stress_category,
-    
 
     -- Audit columns
     plants.ingested_at,
