@@ -1,8 +1,10 @@
 ## Agricultural Planting Intelligence Platform
 
-### Project Overview
+### Problem Statement
+Every second, the world loses roughly four football fields of healthy soil. By 2050, an estimated 95% of Earth's land could be degraded (Save Soil / UNEP, 2024). The primary driver is decades of intensive monoculture farming which had involved the same crop, on the same land, season after season, stripping the soil of the organic matter and biological diversity that keep it productive.
+### Methodology
 
-A Data & AI intelligence pipeline that focuses on companion planting to help farmers with paired-planting choices for soil preservation. It collects plant, soil, weather, and water data from public APIs, orchestrated by Apache Airflow and stores everything in a dockerized postgres database environment. The solution integrates data engineering, analytics, feature engineering, and AI-driven interfaces, delivered through a backend feature and a user-friendly frontend inrerface.
+A Data & AI intelligence pipeline that focuses on companion planting to help farmers with paired-planting choices for soil preservation. It collects plant, soil, weather, and water data from public APIs, orchestrated by Apache Airflow and stores data in a dockerized postgres database environment. The solution integrates data engineering, analytics, feature engineering, ML/AI infrastructures, delivered through a backend feature and a user-friendly frontend interface.
 
 <div align="center">
   <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/system-design.png?raw=true" />
