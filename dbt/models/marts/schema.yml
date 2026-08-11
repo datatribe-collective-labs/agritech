@@ -1,0 +1,105 @@
+version: 2
+
+models:
+  - name: mart_planting_features
+    description: >
+      The final gold-layer table. One row per city x month.
+      Grain is city + month for seasonal ML features.
+      Consumed by the ML model and AI recommendation engine.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            severity: error
+          combination_of_columns:
+            - city
+            - month
+    columns:
+      - name: city
+        description: City name.
+        tests:
+          - not_null
+      - name: month
+        description: Month number 1-12.
+        tests:
+          - not_null
+      - name: country
+        description: ISO 2-letter country code.
+        tests:
+          - not_null
+      - name: soil_ph
+        description: Soil pH 0-14. NULL if SoilGrids returned invalid data.
+      - name: planting_suitability_score
+        description: Composite score 0-100. Higher = better immediate conditions.
+        tests:
+          - not_null
+      - name: irrigation_needed
+        description: TRUE when current ET0 exceeds precipitation.
+      - name: water_deficit_mm
+        description: Current daily water deficit in mm.
+      - name: nitrogen_deficient
+        description: TRUE when nitrogen < 1.0 g/kg.
+      - name: mart_built_at
+        description: Timestamp when this mart was last rebuilt by dbt.
+        tests:
+          - not_null
+
+  - name: mart_ml_annual_features
+    description: >
+      ML Feature Table A
+      Annual grain: One row per city (54 rows).
+      Used for the annual recommendation model, and asnwers to which species suit
+      the location year-round based on soil and long-term climate.
+      Static features appear exactly once per city.
+      Includes is_ml_ready flag to filter training rows.
+    columns:
+      - name: city
+        description: City name — primary key at annual grain.
+        tests:
+          - not_null
+          - unique
+      - name: is_ml_ready
+        description: TRUE when soil_ph, climate_zone, and top_species_1 are all present.
+        tests:
+          - not_null
+      - name: soil_feature_completeness
+        description: Count 0-6 of populated soil features. Filter on >= 4 for training.
+        tests:
+          - not_null
+      - name: climate_feature_completeness
+        description: Count 0-5 of populated climate features. Filter on >= 3 for training.
+        tests:
+          - not_null
+
+  - name: mart_ml_seasonal_features
+    description: >
+      ML Feature Table B. 
+      Seasonal grain: one row per city x month.
+      Used for the seasonal recommendation model: what to plant THIS month.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            severity: error
+          combination_of_columns:
+            - city
+            - month
+    columns:
+      - name: city
+        description: City name.
+        tests:
+          - not_null
+      - name: month
+        description: Month number 1-12.
+        tests:
+          - not_null
+      - name: local_season
+        description: Hemisphere-adjusted season. Winter in June for Southern Hemisphere.
+        tests:
+          - not_null
+      - name: is_ml_ready
+        description: TRUE when top_species_1, avg_temp_c, avg_monthly_precip_mm, and climate_zone present.
+        tests:
+          - not_null
+      - name: monthly_feature_completeness
+        description: Count 0-5 of populated monthly climate features.
+        tests:
+          - not_null
