@@ -29,6 +29,7 @@ GLOBAL_LOCATIONS = [
     {"City": "Harare",          "Country": "ZW", "Lat": -17.8252, "Lon":  31.0335},
     {"City": "Cairo",           "Country": "EG", "Lat":  30.0444, "Lon":  31.2357},
     {"City": "Casablanca",      "Country": "MA", "Lat":  33.5731, "Lon":  -7.5898},
+    {"City": "Obuasi",          "Country": "GH", "Lat":   6.284694, "Lon":  1.609667},
 
     # Asia
     {"City": "Delhi",           "Country": "IN", "Lat":  28.6139, "Lon":  77.2090},
