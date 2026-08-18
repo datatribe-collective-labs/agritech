@@ -21,4 +21,10 @@ What it provides:
 - free for small scale farmers/growers
 - commercial license for large scale commercial operators (> €10k annual profit)
 
+## Problem Statement
+Every second, the world loses roughly four football fields of healthy soil. By 2050, an estimated 95% of Earth's land could be degraded (Save Soil / UNEP, 2024). The primary driver is decades of intensive monoculture farming which had involved the same crop, on the same land, season after season, stripping the soil of the organic matter and biological diversity that keep it productive.
+
+## Methodology
+This relational planting application brings together locally collected data and large datasets on plant, land and weather. From real time local data it suggests mixed-planting options for soil preservation. More specifically, it collects plant, soil, weather, climate and water data both directly from users and from public data sources through open APIs, coordinated by Apache Airflow and stores data in a dockerised postgres database environment. The solution integrates data engineering, analytics, feature engineering, ML/AI infrastructures, delivered through a backend feature and a user-friendly frontend interface.
+
 [add more details below this]
