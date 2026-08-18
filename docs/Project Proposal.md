@@ -18,6 +18,6 @@ What it provides:
 * minimise harmful effects
 
 **Licenses**
-[] free for small scale farmers/growers
-[] commercial license for large scale commercial operators (> €10k annual profit)
+ [] free for small scale farmers/growers
+ [] commercial license for large scale commercial operators (> €10k annual profit)
 
