@@ -1,0 +1,87 @@
+plant_name_fi,english_name,sun,soil_ph,soil_type,footprint_min_cm,footprint_max_cm,height_cm,root_depth,weeks_to_mature,season,propagation,notes
+Aaprottimaruna,Southernwood,full,neutral,any,30,90,120,medium,52,perennial,division,
+Aitokissanminttu,Catmint,full,neutral,any,30,60,60,shallow,12,perennial,division,
+Aprikoosi,Apricot,full,neutral,loam,300,600,500,deep,156,perennial,seedling,Tree - footprint is canopy diameter
+Artisokka,Artichoke,full,neutral,loam,60,120,150,deep,52,perennial,division,
+Auringonkukka,Sunflower,full,neutral,any,30,60,200,deep,11,summer,seed,
+Basilika,Basil,full,neutral,loam,20,40,45,shallow,8,summer,seed,
+Chilli,Chilli,full,neutral,loam,30,50,60,medium,16,summer,seedling,
+Fenkoli,Fennel,full,neutral,any,30,50,150,deep,12,perennial,seed,allelopathic - keep away from most vegetables
+Herneet,Peas,full,neutral,any,5,10,100,shallow,10,spring,seed,climbing varieties need support
+Hedelmäpuut,Fruit trees (category),full,neutral,loam,300,600,400,deep,208,perennial,seedling,category group - individual species listed separately
+Iisoppi,Hyssop,full,neutral,any,20,40,60,medium,12,perennial,seed,
+Kaali,Cabbage,full,neutral,loam,40,60,40,medium,12,summer,seedling,
+Kamomilla,Chamomile,full,neutral,any,15,30,40,shallow,8,summer,seed,
+Karviaismarja,Gooseberry,full,neutral,loam,100,150,120,medium,52,perennial,cutting,
+Kehäkukka,Marigold,full,neutral,any,20,40,40,shallow,8,summer,seed,
+Kesäkurpitsa,Courgette,full,neutral,loam,60,120,60,medium,8,summer,seed,large sprawling footprint
+Kiipeilypapu,Climbing bean,full,acid,loam,15,25,200,medium,12,summer,seed,"climbing - height is vine length, needs supports or other plants to climb"
+Kiekkokurpitsa,Pattypan squash,full,neutral,loam,60,100,50,medium,8,summer,seed,
+Kirsikka,Cherry,full,neutral,loam,300,500,500,deep,156,perennial,seedling,tree - footprint is canopy diameter
+Kirveli,Chervil,partial,neutral,loam,15,25,40,shallow,6,spring,seed,prefers cool shade
+Kohlrabi,Kohlrabi,full,neutral,loam,20,30,40,shallow,8,spring,seedling,
+Koiruoho,Wormwood,full,neutral,any,40,80,100,medium,12,perennial,division,allelopathic - use as border only
+Korianteri,Coriander,full,neutral,any,10,20,50,shallow,6,summer,seed,bolts in heat
+Koristekrassi,Nasturtium,full,neutral,any,30,60,30,shallow,8,summer,seed,trailing or climbing
+Krysanteemit,Chrysanthemum,full,neutral,loam,30,60,60,medium,16,perennial,division,
+Kukkakaali,Cauliflower,full,neutral,loam,50,70,60,medium,12,summer,seedling,
+Kurkku,Cucumber,full,neutral,loam,30,60,200,medium,8,summer,seed,climbing - height is vine length
+Kurpitsa,Pumpkin,full,neutral,loam,100,200,40,medium,12,summer,seed,very large sprawling footprint
+Kynteli,Savory,full,neutral,any,20,30,30,shallow,8,summer,seed,annual; winter savory is perennial
+Lanttu,Swede,full,neutral,loam,20,30,30,medium,16,summer,seed,
+Laventeli,Lavender,full,alkaline,sandy,40,80,60,medium,52,perennial,cutting,dislikes clay and wet soil
+Lehtikaali,Kale,full,neutral,loam,40,60,80,medium,10,summer,seedling,
+Liperi,Lovage,full,neutral,loam,60,100,180,deep,16,perennial,division,very tall - good background plant
+Luumu,Plum,full,neutral,loam,300,500,400,deep,156,perennial,seedling,tree - footprint is canopy diameter
+Maa-artisokka,Jerusalem artichoke,full,neutral,any,30,50,250,deep,16,perennial,division,spreads aggressively - contain
+Makeamaissi,Sweet corn,full,neutral,loam,30,50,200,deep,12,summer,seed,plant in blocks for pollination
+Mangoldi,Chard,partial,neutral,any,20,40,60,medium,8,summer,seed,
+Maissi,Corn,full,neutral,loam,30,50,200,deep,12,summer,seed,
+Mansikka,Strawberry,full,acid,loam,30,40,20,shallow,8,perennial,runner,spreads by runners; ground cover under trees
+Meirami,Marjoram,full,neutral,any,20,40,40,shallow,8,perennial,seed,
+Minttu,Mint,partial,neutral,any,30,60,60,shallow,8,perennial,division,spreads aggressively - contain in pot
+Mulperipuu,Mulberry,full,neutral,loam,400,800,600,deep,208,perennial,cutting,tree - large canopy
+Munakoiso,Aubergine,full,neutral,loam,40,60,80,medium,16,summer,seedling,needs warmth
+Nauris,Turnip,full,neutral,any,15,25,30,medium,6,spring,seed,
+Nokkonen,Nettle,partial,neutral,any,30,60,100,medium,12,perennial,division,dynamic accumulator; compost activator
+Omena,Apple,full,neutral,loam,300,600,500,deep,156,perennial,seedling,tree - footprint is canopy diameter
+Palsternakka,Parsnip,full,neutral,loam,10,15,100,deep,16,summer,seed,needs loose soil for straight roots
+Paprika,Pepper,full,neutral,loam,30,50,70,medium,16,summer,seedling,
+Parsa,Asparagus,full,neutral,sandy,30,50,150,deep,52,perennial,crown,takes 2–3 years to establish
+Parsakaali,Broccoli,full,neutral,loam,40,60,60,medium,10,summer,seedling,
+Persikka,Peach,full,neutral,loam,300,500,400,deep,156,perennial,seedling,tree - needs sheltered spot
+Persilja,Parsley,partial,neutral,loam,15,25,40,medium,10,summer,seed,slow to germinate
+Peruna,Potato,full,acid,sandy,30,40,60,medium,12,summer,tuber,needs acid soil; earthing up required
+Pietaryrtti,Tansy,full,neutral,any,40,60,120,medium,12,perennial,division,toxic if ingested; use as border
+Pinaatti,Spinach,partial,neutral,loam,15,20,30,shallow,6,spring,seed,bolts in heat; succession sow
+Piparjuuri,Horseradish,full,neutral,any,40,60,80,deep,16,perennial,root,spreads aggressively - contain
+Porkkana,Carrot,full,neutral,sandy,5,10,30,deep,12,summer,seed,needs loose sandy soil
+Purasruoho,Borage,full,neutral,any,30,60,60,shallow,8,summer,seed,self-seeds prolifically
+Purjo,Leek,full,neutral,loam,10,15,50,medium,16,summer,seedling,
+Punajuuri,Beetroot,full,neutral,any,10,15,30,medium,8,summer,seed,
+Puolanminttu,Peppermint,partial,neutral,any,30,60,60,shallow,8,perennial,division,spreads aggressively - contain in pot
+Päärynä,Pear,full,neutral,loam,300,600,500,deep,156,perennial,seedling,tree - footprint is canopy diameter
+Raparperi,Rhubarb,full,neutral,loam,100,150,100,deep,52,perennial,division,leaves toxic; do not harvest first year
+Retiisi,Radish,full,neutral,any,5,10,20,shallow,3,spring,seed,fastest crop - good gap filler
+Rosmariini,Rosemary,full,alkaline,sandy,40,80,100,medium,16,perennial,cutting,dislikes wet soil and frost
+Ruoho,Grass,full,neutral,any,0,0,10,shallow,4,perennial,seed,ground cover
+Ruohosipuli,Chives,full,neutral,any,10,20,30,shallow,8,perennial,division,
+Ruusu,Rose,full,neutral,loam,60,120,150,medium,52,perennial,cutting,
+Ruusukaali,Brussels sprouts,full,neutral,loam,50,70,90,medium,16,summer,seedling,needs staking in wind
+Salaatti,Lettuce,partial,neutral,any,20,30,20,shallow,6,spring,seed,bolts in heat; good underplanting
+Sallottisipuli,Shallot,full,neutral,loam,10,15,30,shallow,16,summer,bulb,
+Salvia,Sage,full,neutral,sandy,30,60,60,medium,16,perennial,cutting,dislikes wet soil
+Selleri,Celery,partial,neutral,loam,20,30,60,medium,16,summer,seedling,needs consistent moisture
+Siankärsämö,Yarrow,full,neutral,any,30,50,60,medium,12,perennial,division,dynamic accumulator; attracts predatory insects
+Sinappi,Mustard,full,neutral,any,20,30,60,shallow,6,spring,seed,good green manure
+Sipuli,Onion,full,neutral,loam,10,15,30,shallow,16,summer,set,
+Sitruunamelissa,Lemon balm,partial,neutral,any,30,60,60,shallow,8,perennial,division,spreads by seed - deadhead to contain
+Sormustinkukka,Foxglove,partial,acid,loam,30,50,120,medium,52,perennial,seed,toxic; biennial - flowers second year
+Tilli,Dill,full,neutral,any,15,30,100,medium,8,summer,seed,do not plant near fennel
+Timjami,Thyme,full,alkaline,sandy,20,40,30,shallow,12,perennial,cutting,
+Tomaatti,Tomato,full,neutral,loam,40,60,150,medium,12,summer,seedling,indeterminate varieties need staking
+Tuoksuruuta,Rue,full,neutral,any,30,60,60,medium,12,perennial,seed,toxic - causes skin burns in sunlight
+Ukonnauriit,Wallflower,full,neutral,any,20,40,60,shallow,52,perennial,seed,biennial flowering plant; attracts early pollinators
+Vadelma,Raspberry,full,neutral,loam,60,100,150,medium,52,perennial,sucker,spreads by suckers
+Valkosipuli,Garlic,full,neutral,loam,10,15,30,shallow,32,perennial,clove,plant in autumn for summer harvest
+Viinirypäle,Grapevine,full,neutral,sandy,100,200,300,deep,156,perennial,cutting,climbing - needs structure
