@@ -1,94 +1,94 @@
-plant_ID,plant_name_fi,image_filename,companions,antagonists,repels,category,type
-1,Aaprottimaruna,aaprottimaruna.png,Aprikoosi,,,,yrtti ja mauste
-2,Aitokissanminttu,aitokissanminttu.png,"Peruna, Laventeli, Rosmariini, Salvia, Minttu",,Muurahaiset,,yrtti ja mauste
-3,Aprikoosi,aprikoosi.png,,,,,hedelmäpuu
-4,Artisokka,artisokka.png,,,,,vihannes
-5,Auringonkukka,auringonkukka.png,"Aprikoosi, Bushinpavut, Ruusukaali, Kurkku, Kurpitsa, Kesäkurpitsa",,,,kukka
-6,Basilika,basilika.png,"Aprikoosi, Parsa, Kurkku, Munakoiso, Fenkoli, Viiniköynnös, Persikkapuu, Tomaatti","Tuoksuruuta, Mangoldi","Kärpäset, Hedelmäkärpänen, Jauhiaiset",,yrtti ja mauste
-7,Chilli,chilli.png,"Porkkana, Munakoiso, Tomaatti",,,,vihannes
-8,Fenkoli,fenkoli.png,"Basilika, Tilli, Kohlrabi, Koiruoho","Pavut, Härkäpapu, Tomaatti",Kirput,,vihannes
-9,Hedelmäpuut,hedelmapuut.png,"Ruohosipuli, Kehäkukka, Valkosipuli, Piparjuuri, Sitruunamelissa, Kehäkukka, Sinappi, Krassi, Mangoldi, Pinaatti, Pietaryrtti, Siankärsämö","Ruoho, Tomaatti, Peruna",,,hedelmä
-10,Herneet,herneet.png,"Pavut, Punajuuri, Purasruoho, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Maissi, Kurkku, Salaatti, Liperi, Meirami, Palsternakka, Peruna, Retiisi, Vadelma, Salvia, Kurpitsa, Nauris",Sipulit,,,vihannes
-11,Härkäpapu,harkapapu.png,,,,Pavut,vihannes
-12,Iisoppi,iisoppi.png,"Viiniköynnös, Retiisi, Ruusu, Tomaatti",,Perhonen,,yrtti ja mauste
-13,Juoksupapu,juoksupapu.png,Tuoksuherne,,,Pavut,vihannes
-14,KAALIT,kaalit.png,"Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Purasruoho, Kamomilla, Lehtiselleri, Korianteri, Kurkku, Tilli, Valkosipuli, Laventeli, Salaatti, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Herneet, Pennyroyal, Peruna, Rosmariini, Salvia, Timjami","Valkosipuli, Tuoksuruuta, Mansikka, Tomaatti",Kotilot,YES,vihannes
-15,Kaali,kaali.png,"Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Purasruoho, Kamomilla, Lehtiselleri, Korianteri, Kurkku, Tilli, Valkosipuli, Laventeli, Salaatti, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Herneet, Pennyroyal, Peruna, Rosmariini, Salvia, Timjami","Valkosipuli, Tuoksuruuta, Mansikka, Tomaatti",Kotilot,Kaalit,vihannes
-16,Kamomilla,kamomilla.png,,Minttu,Perhonen,,yrtti ja mauste
-17,Karviaismarja,karviaismarja.png,"Pietaryrtti, Tomaatti",,,,marja
-18,Kehäkukka,kehakukka.png,"Omena, Aprikoosi, Pavut, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Kirsikka, Hedelmäpuut, Kohlrabi, Salaatti, Mulperipuu, Persikkapuu, Päärynäpuus, Luumut, Peruna, Raspberry, Ruusu, Mansikka, Tomaatti",,,,kukka
-19,Kesäkurpitsa,kesakurpitsa.png,"Makeamaissi, Meirami, Krassi, Auringonkukka",,,Kurpitsat,vihannes
-20,Kiekkokurpitsa,kiekkokurpitsa.png,,,,Kurpitsat,vihannes
-21,Kiipeilypapu,kiipeilypapu.png,"Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Maissi, Meirami, Salaatti, Retiisi","Punajuuri, Ruohosipuli, Valkosipuli, Sipuli, Aunrinkokukka",,Pavut,vihannes
-22,Kirsikka,kirsikka.png,,,,,hedelmäpuu
-23,Kirveli,kirveli.png,"Korianteri, Tilli, Valkosipuli, Salaatti, Persilja, Retiisi, Siankärsämö",,,,yrtti ja mauste
-24,Kohlrabi,kohlrabi.png,"Punajuuri, Kurkku, Fenkoli, Liperi, Kehäkukka, Meirami, Tomaatti",,,Kaalit,vihannes
-25,Koiruoho,koiruoho.png,"Fenkoli, Tuoksuruuta, Sallottisipuli",,"Kirput,  Kärpäset,  Hiiret,  Hyttyset,  Koit,  Etanat",,yrtti ja mauste
-26,Korianteri,korianteri.png,"Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Kirveli, Tilli, Palsternakka",Fenkoli,,,yrtti ja mauste
-27,Koristekrassi,koristekrassi.png,"Omena, Aprikoosi, Parsakaali, Kaalit, Kirsikka, Kurkku, Hedelmäpuut, Mulperipuu, Peruna, Retiisi, Ruusu, Kurpitsa, Tomaatti, Kesäkurpitsa",,Jauhiaiset,,kukka
-28,Krysanteemit,krysanteemit.png,Mansikka,,Ripsiäiset,,kukka
-29,Kukkakaali,kukkakaali.png,,,,Kaalit,vihannes
-30,Kurkku,kurkku.png,"Basilika, Pavut, Bushinpavut, Purasruoho, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Makeamaissi, Tilli, Kohlrabi, Salaatti, Liperi, Meirami, Krassi, Palsternakka, Herneet, Retiisi, Auringonkukka, Pietaryrtti","Peruna, Salvia",,,vihannes
-31,KURPITSAT,kurpitsat.png,"Maissi, Meirami, Liperi",Peruna,,YES,vihannes
-32,Kurpitsa,kurpitsa.png,"Maissi, Meirami, Liperi",Peruna,,Kurpitsat,vihannes
-33,Kynteli,kynteli.png,"Pavut, Sipuli",,,,yrtti ja mauste
-34,Lanttu,lanttu.png,,,,,vihannes
-35,Laventeli,laventeli.png,"Kaalit, Valkosipuli, Meirami, Ruusu, Mangoldi, Mansikka",Fenkoli,Koit,,kukka
-36,Lehtikaali,lehtikaali.png,,,,Kaalit,vihannes
-37,Liperi,liperi.png,"Parsa, Pavut, Härkäpapu, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Makeamaissi, Kurkku, Munakoiso, Kohlrabi, Purjo, Purjo, Sipuli, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Sallottisipuli, Mangoldi, Pinaatti, Kurpitsa, Tomaatti, Nauris, Kesäkurpitsa",,,,yrtti ja mauste
-38,Luumu,luumu.png,,,,,hedelmäpuu
-39,Maa-artisokka,maa-artisokka.png,,,,,vihannes
-40,Mangoldi,mangoldi.png,"Punajuuri, Kirsikka, Hedelmäpuut, Laventeli, Liperi, Meirami, Mulperipuu, Sipuli",Basilika,,,vihannes
-41,Maissi,maissi.png,"Pavut, Härkäpapu, Kiipeilypapu, Kurkku, Liperi, Meirami, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Kesäkurpitsa",,,,vihannes
-42,Mansikka,mansikka.png,"Bushinpavut, Ruusukaali, Purasruoho, Ruohosipuli, Laventeli, Purjo, Salaatti, Kehäkukka, Sipuli, Krysanteemit, Salvia, Pinaatti","Parsakaali, Kaalit, kukkakaali",,,hedelmä
-43,Meirami,meirami.png,"Parsa, Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Makeamaissi, Kurkku, Munakoiso, Kohlrabi, Laventeli, Purjo, Salaatti, Sipuli, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Sallottisipuli, Mangoldi, Pinaatti, Kurpitsa, Tomaatti, Kesäkurpitsa",,,,yrtti ja mauste
-44,Minttu,minttu.png,"Kaalit, Tomaatti","Kamomilla, Persilja","Muurahaiset,  Perhonen,  Koit,  Hiiret",,yrtti ja mauste
-45,Mulperipuu,mulperipuu.png,,,,,hedelmäpuu
-46,Munakoiso,munakoiso.png,"Pavut, Liperi, Meirami, Peruna",,,,vihannes
-47,Nauris,nauris.png,"Omena, Liperi, Meirami, Herneet, Tomaatti",,,,vihannes
-48,Nokkonen,nokkonen.png,,,"Sienet, Homeet, Kirvat",,yrtti ja mauste
-49,Omena,omena.png,,,,,hedelmäpuu
-50,Palsternakka,palsternakka.png,"Pavut, Ruohosipuli, Korianteri, Tilli, Makeamaissi, Valkosipuli, Purjo, Salaatti, Liperi, Meirami, Sipuli, Herneet, Peruna, Retiisi, Rosmariini, Salvia, Tomaatti","Porkkana, Lehtiselleri",,,vihannes
-51,Paprika,paprika.png,"Porkkana, Munakoiso, Tomaatti",,,,vihannes
-52,Parsa,parsa.png,"Basilika, Ruohosipuli, Liperi, Meirami, Persilja, Tomaatti",,,,vihannes
-53,Parsakaali,parsakaali.png,,,,Kaalit,vihannes
-54,PAVUT,pavut.png,"Parsakaali, Ruusukaali, Kaalit, Porkkana, Kurpitsa,  Kukkakaali, Maissi, Kurkku, Salaatti, Liperi, Kehäkukka, Meirami, Persilja, Palsternakka, Herneet, Peruna, Rosmariini, Salvia, Kynteli, Pinaatti","Ruohosipuli, Fenkoli, Valkosipuli, Sipulit, Sallottisipuli",,YES,vihannes
-55,Persikka,persikka.png,,,,,hedelmäpuu
-56,Persilja,persilja.png,"Parsa, Pavut, Kirveli, Ruohosipuli, Sipuli, Rosmariini, Ruusu, Tomaatti","Minttu, Salaatti",,,yrtti ja mauste
-57,Peruna,peruna.png,"Pavut, Härkäpapu, Bushinpavut, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Maissi, Munakoiso, Sormustinkukka, Piparjuuri, Kehäkukka, Meirami, Krassi, Palsternakka, Herneet","Omena, Lehtiselleri, Kirsikka, Kurkku, Kurpitsa, Vadelma, Rosmariini, Auringonkukka, Tomaatti",,,vihannes
-58,Pietaryrtti,pietaryrtti.png,"Omena, Aprikoosi, Purasruoho, Kaalit, Kirsikka, Kurkku, Hedelmäpuut, Karviaismarja, Viiniköynnös, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Vadelma, Ruusu, Kurpitsa, Siankärsämö",,"Muurahaiset, Perhonen, Kirput, Kärpäset, Hedelmäkärpänen, Hyttyset",,vihannes
-59,Pinaatti,pinaatti.png,"Omena, Aprikoosi, Härkäpapu, Kirsikka, Hedelmäpuut, Liperi, Meirami, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Mansikka",,,,yrtti ja mauste
-60,Piparjuuri,piparjuuri.png,"Omena, Aprikoosi, Kirsikka, Peruna, Ruusu, Nokkonen",,Herät,,yrtti ja mauste
-61,Porkkana,porkkana.png,"Pavut, Ruohosipuli, Korianteri, Kurkku, Tilli, Purjo, Salaatti, Liperi, Kehäkukka, Meirami, Sipuli, Palsternakka, Herneet, Retiisi, Rosmariini, Salvia, Tomaatti",,,,yrtti ja mauste
-62,Punajuuri,punajuuri.png,"Bushinpavut, Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Tilli, Kohlrabi, Salaatti, Liperi, Meirami, Sipuli, Herneet, Peruna, mangoldi","Kiipeilypapu, Tomaatti",,,yrtti ja mauste
-63,Puolanminttu,puolanminttu.png,Kaalit,,"Muurahaiset, Kirvat, Kirput, Hyttyset, Koit",,yrtti ja mauste
-64,Purasruoho,purasruoho.png,"Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Kurkku, Herneet, Kurpitsa, Mansikka, Pietaryrtti, Tomaatti",,,,kukka
-65,Purjo,purjo.png,"Porkkana, Lehtiselleri, Meirami, Sipuli",,,Sipulit,vihannes
-66,Päärynä,paaryna.png,,,,,hedelmäpuu
-67,Raparperi,raparperi.png,,,,,vihannes
-68,Retiisi,retiisi.png,"Kiipeilypapu, Porkkana, Kirveli, Maissi, Kurkku, Salaatti, Meirami, Krassi, Palsternakka",,,,vihannes
-69,Rosmariini,rosmariini.png,"Pavut, Kaalit, Porkkana, Valkosipuli, Persilja, Salvia","Peruna, Tomaatti","Perhonen,  Koit,  Etanat",,yrtti ja mauste
-70,Ruoho,ruoho.png,,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Salvia",,,luokittelematon
-71,Ruohosipuli,ruohosipuli.png,"Omena, Parsa, Porkkana, Kirsikka, Hedelmäpuut, Liperi, Meirami, Mulperipuu, Persilja, Palsternakka, Persikkapuu, Herneet, Luumut, Ruusu, Mansikka, Tomaatti, Fenkoli, Tuoksuruuta, Sallottisipuli","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Homeet,Sipulit,yrtti ja mauste
-72,Ruusu,ruusu.png,"Ruohosipuli, Valkosipuli, Piparjuuri, Iisoppi, Laventeli, Sitruunamelissa, Kehäkukka, Krassi, Sipuli, Persilja, Tuoksuruuta, Salvia, Pietaryrtti, Timjami",,,,kukka
-73,Ruusukaali,ruusukaali.png,,,,,vihannes
-74,Salaatti,salaatti.png,"Pavut, Härkäpapu, Kiipeilypapu, Punajuuri, Kaalit, Porkkana, Kirsikka, Kirveli, Kurkku, Kehäkukka, Meirami, Sipuli, Herneet, Retiisi, Mansikka",Persilja,,,vihannes
-75,Sallottisipuli,sallottisipuli.png,,,,Sipulit,vihannes
-76,Salvia,salvia.png,"Pavut, Kaalit, Porkkana, Palsternakka, Herneet, Rosmariini, Ruusu, Mansikka, Koiruoho",,"Sienet,  Homeet,  Koit",,yrtti ja mauste
-77,Samettikukka,samettikukka.png,"Peruna, Kurpitsa, Lehtikaali, Munakoiso, Porkkana, Parsakaali",,,,kukka
-78,Lehtiselleri,lehtiselleri.png,"Bushinpavut, Kaalit, Tilli, Purjo, Liperi, Meirami, Palsternakka, Herneet, Tomaatti",Peruna,,,vihannes
-79,Siankärsämö,siankarsamo.png,"Omena, Aprikoosi, Kirsikka, Kirveli, Hedelmäpuut, Viiniköynnös, Ruoho, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Pietaryrtti",,,,kukka
-80,Sinappi,sinappi.png,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Pavut, Viiniköynnös, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut",,,,yrtti ja mauste
-81,SIPULIT,sipulit.png,"Punajuuri, Kaalit, Porkkana, Purjo, Salaatti, Liperi, Meirami, Persilja, Palsternakka, Ruusu, Kynteli, Mangoldi, Mansikka, Tomaatti","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Vihannespunkki,YES,vihannes
-82,Sipuli,sipuli.png,"Punajuuri, Kaalit, Porkkana, Purjo, Salaatti, Liperi, Meirami, Persilja, Palsternakka, Ruusu, Kynteli, Mangoldi, Mansikka, Tomaatti","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Vihannespunkki,Sipulit,vihannes
-83,Sitruunamelissa,sitruunamelissa.png,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Mulperipuu, Ruusu",,,,yrtti ja mauste
-84,Sormustinkukka,sormustinkukka.png,"Omena, Peruna, Tomaatti",,,,kukka
-85,Tilli,tilli.png,"Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Kirveli, Korianteri, Kurkku, Fenkoli, Tomaatti",,Perhonen,,yrtti ja mauste
-86,Timjami,timjami.png,"Kaalit, Ruusu",,"Perhonen, Koit",,yrtti ja mauste
-87,Tomaatti,tomaatti.png,"Parsa, Basilika, Purasruoho, Parsakaali, Ruusukaali, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Tilli, Sormustinkukka, Karviaismarja, Viiniköynnös, Iisoppi, Kohlrabi, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Persilja, Palsternakka, Peruna, Nauris","Punajuuri, Fenkoli, Peruna, Rosmariini","Kirvat, Herät, Ripsiäiset",,vihannes
-88,Tuoksuherne,tuoksuherne.png,,,,,kukka
-89,Tuoksuruuta,tuoksuruuta.png,"Ruusukaali, Kukkakaali, Kohlrabi, Vadelma, Ruusu","Basilika, Parsakaali, Kaalit, kukkakaali, Salvia",Kärpäset,,kukka
-90,Ukonnauriit,ukonnauriit.png,Omena,,,,luokittelematon
-91,Vadelma,vadelma.png,"Kehäkukka, Herneet, Tuoksuruuta, Pietaryrtti",Peruna,,,marja
-92,Valkosipuli,valkosipuli.png,"Omena, Aprikoosi, Kirsikka, Kirveli, Hedelmäpuut, Laventeli, Palsternakka, Persikkapuu, Päärynäpuu, Herneet, Rosmariini, Ruusu, Mansikka","Pavut, Härkäpapu, Bushinpapu, Kaalit, Auringonkukka, Kiipeilypapu","Muurahaiset,  Kirvat, Perhonen,  Herät,  Hyttyset,  Kotilot, Madot, Kärsäkkäät, Vihannespunkki",,vihannes
-93,Viinirypäle,viinirypale.png,"Basilika, Pavut, Iisoppi, Sinappi, Mulperipuu, Pietaryrtti, Tomaatti, Siankärsämö",,,,luokittelematon
+plant_name_fi,image_filename,companions,antagonists,repels,category,type
+Aaprottimaruna,aaprottimaruna.png,Aprikoosi,,,,yrtti ja mauste
+Aitokissanminttu,aitokissanminttu.png,"Peruna, Laventeli, Rosmariini, Salvia, Minttu",,Muurahaiset,,yrtti ja mauste
+Aprikoosi,aprikoosi.png,,,,,hedelmäpuu
+Artisokka,artisokka.png,,,,,vihannes
+Auringonkukka,auringonkukka.png,"Aprikoosi, Bushinpavut, Ruusukaali, Kurkku, Kurpitsa, Kesäkurpitsa",,,,kukka
+Basilika,basilika.png,"Aprikoosi, Parsa, Kurkku, Munakoiso, Fenkoli, Viiniköynnös, Persikkapuu, Tomaatti","Tuoksuruuta, Mangoldi","Kärpäset, Hedelmäkärpänen, Jauhiaiset",,yrtti ja mauste
+Chilli,chilli.png,"Porkkana, Munakoiso, Tomaatti",,,,vihannes
+Fenkoli,fenkoli.png,"Basilika, Tilli, Kohlrabi, Koiruoho","Pavut, Härkäpapu, Tomaatti",Kirput,,vihannes
+Hedelmäpuut,hedelmapuut.png,"Ruohosipuli, Kehäkukka, Valkosipuli, Piparjuuri, Sitruunamelissa, Kehäkukka, Sinappi, Krassi, Mangoldi, Pinaatti, Pietaryrtti, Siankärsämö","Ruoho, Tomaatti, Peruna",,,hedelmä
+Herneet,herneet.png,"Pavut, Punajuuri, Purasruoho, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Maissi, Kurkku, Salaatti, Liperi, Meirami, Palsternakka, Peruna, Retiisi, Vadelma, Salvia, Kurpitsa, Nauris",Sipulit,,,vihannes
+Härkäpapu,harkapapu.png,,,,Pavut,vihannes
+Iisoppi,iisoppi.png,"Viiniköynnös, Retiisi, Ruusu, Tomaatti",,Perhonen,,yrtti ja mauste
+Juoksupapu,juoksupapu.png,Tuoksuherne,,,Pavut,vihannes
+KAALIT,kaalit.png,"Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Purasruoho, Kamomilla, Lehtiselleri, Korianteri, Kurkku, Tilli, Valkosipuli, Laventeli, Salaatti, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Herneet, Pennyroyal, Peruna, Rosmariini, Salvia, Timjami","Valkosipuli, Tuoksuruuta, Mansikka, Tomaatti",Kotilot,YES,vihannes
+Kaali,kaali.png,"Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Purasruoho, Kamomilla, Lehtiselleri, Korianteri, Kurkku, Tilli, Valkosipuli, Laventeli, Salaatti, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Herneet, Pennyroyal, Peruna, Rosmariini, Salvia, Timjami","Valkosipuli, Tuoksuruuta, Mansikka, Tomaatti",Kotilot,Kaalit,vihannes
+Kamomilla,kamomilla.png,,Minttu,Perhonen,,yrtti ja mauste
+Karviaismarja,karviaismarja.png,"Pietaryrtti, Tomaatti",,,,marja
+Kehäkukka,kehakukka.png,"Omena, Aprikoosi, Pavut, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Kirsikka, Hedelmäpuut, Kohlrabi, Salaatti, Mulperipuu, Persikkapuu, Päärynäpuus, Luumut, Peruna, Raspberry, Ruusu, Mansikka, Tomaatti",,,,kukka
+Kesäkurpitsa,kesakurpitsa.png,"Makeamaissi, Meirami, Krassi, Auringonkukka",,,Kurpitsat,vihannes
+Kiekkokurpitsa,kiekkokurpitsa.png,,,,Kurpitsat,vihannes
+Kiipeilypapu,kiipeilypapu.png,"Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Maissi, Meirami, Salaatti, Retiisi","Punajuuri, Ruohosipuli, Valkosipuli, Sipuli, Aunrinkokukka",,Pavut,vihannes
+Kirsikka,kirsikka.png,,,,,hedelmäpuu
+Kirveli,kirveli.png,"Korianteri, Tilli, Valkosipuli, Salaatti, Persilja, Retiisi, Siankärsämö",,,,yrtti ja mauste
+Kohlrabi,kohlrabi.png,"Punajuuri, Kurkku, Fenkoli, Liperi, Kehäkukka, Meirami, Tomaatti",,,Kaalit,vihannes
+Koiruoho,koiruoho.png,"Fenkoli, Tuoksuruuta, Sallottisipuli",,"Kirput,  Kärpäset,  Hiiret,  Hyttyset,  Koit,  Etanat",,yrtti ja mauste
+Korianteri,korianteri.png,"Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Kirveli, Tilli, Palsternakka",Fenkoli,,,yrtti ja mauste
+Koristekrassi,koristekrassi.png,"Omena, Aprikoosi, Parsakaali, Kaalit, Kirsikka, Kurkku, Hedelmäpuut, Mulperipuu, Peruna, Retiisi, Ruusu, Kurpitsa, Tomaatti, Kesäkurpitsa",,Jauhiaiset,,kukka
+Krysanteemit,krysanteemit.png,Mansikka,,Ripsiäiset,,kukka
+Kukkakaali,kukkakaali.png,,,,Kaalit,vihannes
+Kurkku,kurkku.png,"Basilika, Pavut, Bushinpavut, Purasruoho, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Makeamaissi, Tilli, Kohlrabi, Salaatti, Liperi, Meirami, Krassi, Palsternakka, Herneet, Retiisi, Auringonkukka, Pietaryrtti","Peruna, Salvia",,,vihannes
+KURPITSAT,kurpitsat.png,"Maissi, Meirami, Liperi",Peruna,,YES,vihannes
+Kurpitsa,kurpitsa.png,"Maissi, Meirami, Liperi",Peruna,,Kurpitsat,vihannes
+Kynteli,kynteli.png,"Pavut, Sipuli",,,,yrtti ja mauste
+Lanttu,lanttu.png,,,,,vihannes
+Laventeli,laventeli.png,"Kaalit, Valkosipuli, Meirami, Ruusu, Mangoldi, Mansikka",Fenkoli,Koit,,kukka
+Lehtikaali,lehtikaali.png,,,,Kaalit,vihannes
+Liperi,liperi.png,"Parsa, Pavut, Härkäpapu, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Makeamaissi, Kurkku, Munakoiso, Kohlrabi, Purjo, Purjo, Sipuli, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Sallottisipuli, Mangoldi, Pinaatti, Kurpitsa, Tomaatti, Nauris, Kesäkurpitsa",,,,yrtti ja mauste
+Luumu,luumu.png,,,,,hedelmäpuu
+Maa-artisokka,maa-artisokka.png,,,,,vihannes
+Mangoldi,mangoldi.png,"Punajuuri, Kirsikka, Hedelmäpuut, Laventeli, Liperi, Meirami, Mulperipuu, Sipuli",Basilika,,,vihannes
+Maissi,maissi.png,"Pavut, Härkäpapu, Kiipeilypapu, Kurkku, Liperi, Meirami, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Kesäkurpitsa",,,,vihannes
+Mansikka,mansikka.png,"Bushinpavut, Ruusukaali, Purasruoho, Ruohosipuli, Laventeli, Purjo, Salaatti, Kehäkukka, Sipuli, Krysanteemit, Salvia, Pinaatti","Parsakaali, Kaalit, kukkakaali",,,hedelmä
+Meirami,meirami.png,"Parsa, Pavut, Härkäpapu, Bushinpavut, Kiipeilypapu, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Makeamaissi, Kurkku, Munakoiso, Kohlrabi, Laventeli, Purjo, Salaatti, Sipuli, Palsternakka, Herneet, Peruna, Kurpitsa, Retiisi, Sallottisipuli, Mangoldi, Pinaatti, Kurpitsa, Tomaatti, Kesäkurpitsa",,,,yrtti ja mauste
+Minttu,minttu.png,"Kaalit, Tomaatti","Kamomilla, Persilja","Muurahaiset,  Perhonen,  Koit,  Hiiret",,yrtti ja mauste
+Mulperipuu,mulperipuu.png,,,,,hedelmäpuu
+Munakoiso,munakoiso.png,"Pavut, Liperi, Meirami, Peruna",,,,vihannes
+Nauris,nauris.png,"Omena, Liperi, Meirami, Herneet, Tomaatti",,,,vihannes
+Nokkonen,nokkonen.png,,,"Sienet, Homeet, Kirvat",,yrtti ja mauste
+Omena,omena.png,,,,,hedelmäpuu
+Palsternakka,palsternakka.png,"Pavut, Ruohosipuli, Korianteri, Tilli, Makeamaissi, Valkosipuli, Purjo, Salaatti, Liperi, Meirami, Sipuli, Herneet, Peruna, Retiisi, Rosmariini, Salvia, Tomaatti","Porkkana, Lehtiselleri",,,vihannes
+Paprika,paprika.png,"Porkkana, Munakoiso, Tomaatti",,,,vihannes
+Parsa,parsa.png,"Basilika, Ruohosipuli, Liperi, Meirami, Persilja, Tomaatti",,,,vihannes
+Parsakaali,parsakaali.png,,,,Kaalit,vihannes
+PAVUT,pavut.png,"Parsakaali, Ruusukaali, Kaalit, Porkkana, Kurpitsa,  Kukkakaali, Maissi, Kurkku, Salaatti, Liperi, Kehäkukka, Meirami, Persilja, Palsternakka, Herneet, Peruna, Rosmariini, Salvia, Kynteli, Pinaatti","Ruohosipuli, Fenkoli, Valkosipuli, Sipulit, Sallottisipuli",,YES,vihannes
+Persikka,persikka.png,,,,,hedelmäpuu
+Persilja,persilja.png,"Parsa, Pavut, Kirveli, Ruohosipuli, Sipuli, Rosmariini, Ruusu, Tomaatti","Minttu, Salaatti",,,yrtti ja mauste
+Peruna,peruna.png,"Pavut, Härkäpapu, Bushinpavut, Punajuuri, Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Maissi, Munakoiso, Sormustinkukka, Piparjuuri, Kehäkukka, Meirami, Krassi, Palsternakka, Herneet","Omena, Lehtiselleri, Kirsikka, Kurkku, Kurpitsa, Vadelma, Rosmariini, Auringonkukka, Tomaatti",,,vihannes
+Pietaryrtti,pietaryrtti.png,"Omena, Aprikoosi, Purasruoho, Kaalit, Kirsikka, Kurkku, Hedelmäpuut, Karviaismarja, Viiniköynnös, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Vadelma, Ruusu, Kurpitsa, Siankärsämö",,"Muurahaiset, Perhonen, Kirput, Kärpäset, Hedelmäkärpänen, Hyttyset",,vihannes
+Pinaatti,pinaatti.png,"Omena, Aprikoosi, Härkäpapu, Kirsikka, Hedelmäpuut, Liperi, Meirami, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Mansikka",,,,yrtti ja mauste
+Piparjuuri,piparjuuri.png,"Omena, Aprikoosi, Kirsikka, Peruna, Ruusu, Nokkonen",,Herät,,yrtti ja mauste
+Porkkana,porkkana.png,"Pavut, Ruohosipuli, Korianteri, Kurkku, Tilli, Purjo, Salaatti, Liperi, Kehäkukka, Meirami, Sipuli, Palsternakka, Herneet, Retiisi, Rosmariini, Salvia, Tomaatti",,,,yrtti ja mauste
+Punajuuri,punajuuri.png,"Bushinpavut, Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Tilli, Kohlrabi, Salaatti, Liperi, Meirami, Sipuli, Herneet, Peruna, mangoldi","Kiipeilypapu, Tomaatti",,,yrtti ja mauste
+Puolanminttu,puolanminttu.png,Kaalit,,"Muurahaiset, Kirvat, Kirput, Hyttyset, Koit",,yrtti ja mauste
+Purasruoho,purasruoho.png,"Parsakaali, Ruusukaali, Kaalit, Kukkakaali, Kurkku, Herneet, Kurpitsa, Mansikka, Pietaryrtti, Tomaatti",,,,kukka
+Purjo,purjo.png,"Porkkana, Lehtiselleri, Meirami, Sipuli",,,Sipulit,vihannes
+Päärynä,paaryna.png,,,,,hedelmäpuu
+Raparperi,raparperi.png,,,,,vihannes
+Retiisi,retiisi.png,"Kiipeilypapu, Porkkana, Kirveli, Maissi, Kurkku, Salaatti, Meirami, Krassi, Palsternakka",,,,vihannes
+Rosmariini,rosmariini.png,"Pavut, Kaalit, Porkkana, Valkosipuli, Persilja, Salvia","Peruna, Tomaatti","Perhonen,  Koit,  Etanat",,yrtti ja mauste
+Ruoho,ruoho.png,,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Salvia",,,luokittelematon
+Ruohosipuli,ruohosipuli.png,"Omena, Parsa, Porkkana, Kirsikka, Hedelmäpuut, Liperi, Meirami, Mulperipuu, Persilja, Palsternakka, Persikkapuu, Herneet, Luumut, Ruusu, Mansikka, Tomaatti, Fenkoli, Tuoksuruuta, Sallottisipuli","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Homeet,Sipulit,yrtti ja mauste
+Ruusu,ruusu.png,"Ruohosipuli, Valkosipuli, Piparjuuri, Iisoppi, Laventeli, Sitruunamelissa, Kehäkukka, Krassi, Sipuli, Persilja, Tuoksuruuta, Salvia, Pietaryrtti, Timjami",,,,kukka
+Ruusukaali,ruusukaali.png,,,,,vihannes
+Salaatti,salaatti.png,"Pavut, Härkäpapu, Kiipeilypapu, Punajuuri, Kaalit, Porkkana, Kirsikka, Kirveli, Kurkku, Kehäkukka, Meirami, Sipuli, Herneet, Retiisi, Mansikka",Persilja,,,vihannes
+Sallottisipuli,sallottisipuli.png,,,,Sipulit,vihannes
+Salvia,salvia.png,"Pavut, Kaalit, Porkkana, Palsternakka, Herneet, Rosmariini, Ruusu, Mansikka, Koiruoho",,"Sienet,  Homeet,  Koit",,yrtti ja mauste
+Samettikukka,samettikukka.png,"Peruna, Kurpitsa, Lehtikaali, Munakoiso, Porkkana, Parsakaali",,,,kukka
+Lehtiselleri,lehtiselleri.png,"Bushinpavut, Kaalit, Tilli, Purjo, Liperi, Meirami, Palsternakka, Herneet, Tomaatti",Peruna,,,vihannes
+Siankärsämö,siankarsamo.png,"Omena, Aprikoosi, Kirsikka, Kirveli, Hedelmäpuut, Viiniköynnös, Ruoho, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut, Pietaryrtti",,,,kukka
+Sinappi,sinappi.png,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Pavut, Viiniköynnös, Mulperipuu, Persikkapuu, Päärynäpuu, Luumut",,,,yrtti ja mauste
+SIPULIT,sipulit.png,"Punajuuri, Kaalit, Porkkana, Purjo, Salaatti, Liperi, Meirami, Persilja, Palsternakka, Ruusu, Kynteli, Mangoldi, Mansikka, Tomaatti","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Vihannespunkki,YES,vihannes
+Sipuli,sipuli.png,"Punajuuri, Kaalit, Porkkana, Purjo, Salaatti, Liperi, Meirami, Persilja, Palsternakka, Ruusu, Kynteli, Mangoldi, Mansikka, Tomaatti","Pavut, Härkäpapu, Bushinpapu, Kiipeilypapu, Herneet",Vihannespunkki,Sipulit,vihannes
+Sitruunamelissa,sitruunamelissa.png,"Omena, Aprikoosi, Kirsikka, Hedelmäpuut, Mulperipuu, Ruusu",,,,yrtti ja mauste
+Sormustinkukka,sormustinkukka.png,"Omena, Peruna, Tomaatti",,,,kukka
+Tilli,tilli.png,"Punajuuri, Parsakaali, Ruusukaali, Kaalit, Porkkana, Kukkakaali, Lehtiselleri, Kirveli, Korianteri, Kurkku, Fenkoli, Tomaatti",,Perhonen,,yrtti ja mauste
+Timjami,timjami.png,"Kaalit, Ruusu",,"Perhonen, Koit",,yrtti ja mauste
+Tomaatti,tomaatti.png,"Parsa, Basilika, Purasruoho, Parsakaali, Ruusukaali, Porkkana, Kukkakaali, Lehtiselleri, Ruohosipuli, Tilli, Sormustinkukka, Karviaismarja, Viiniköynnös, Iisoppi, Kohlrabi, Liperi, Kehäkukka, Meirami, Minttu, Krassi, Sipuli, Persilja, Palsternakka, Peruna, Nauris","Punajuuri, Fenkoli, Peruna, Rosmariini","Kirvat, Herät, Ripsiäiset",,vihannes
+Tuoksuherne,tuoksuherne.png,,,,,kukka
+Tuoksuruuta,tuoksuruuta.png,"Ruusukaali, Kukkakaali, Kohlrabi, Vadelma, Ruusu","Basilika, Parsakaali, Kaalit, kukkakaali, Salvia",Kärpäset,,kukka
+Ukonnauriit,ukonnauriit.png,Omena,,,,luokittelematon
+Vadelma,vadelma.png,"Kehäkukka, Herneet, Tuoksuruuta, Pietaryrtti",Peruna,,,marja
+Valkosipuli,valkosipuli.png,"Omena, Aprikoosi, Kirsikka, Kirveli, Hedelmäpuut, Laventeli, Palsternakka, Persikkapuu, Päärynäpuu, Herneet, Rosmariini, Ruusu, Mansikka","Pavut, Härkäpapu, Bushinpapu, Kaalit, Auringonkukka, Kiipeilypapu","Muurahaiset,  Kirvat, Perhonen,  Herät,  Hyttyset,  Kotilot, Madot, Kärsäkkäät, Vihannespunkki",,vihannes
+Viinirypäle,viinirypale.png,"Basilika, Pavut, Iisoppi, Sinappi, Mulperipuu, Pietaryrtti, Tomaatti, Siankärsämö",,,,luokittelematon
