@@ -1,43 +1,36 @@
-title: "AI-Driven Task Audit & Role Re-Sorting Workflow",
-text: `<p>This process details how organizations can move away from blanket 'Fluent Finnish' mandates by using structured task auditing and AI analysis.</p>
-        <p>Step 1 extracts raw task data from existing Kanban boards, job descriptions, or HR lists. Step 2 runs these tasks through a structured LLM prompt mapping framework to identify actual language needs and machine-translation feasibility.</p>
-        <p>Step 3 reorganises the workload by either unbundling high-fluency tasks or providing enterprise translation tools, creating an equitable, non-hierarchical division of labor.</p>`,
+title: "Process Diagram — Agricultural Evaluation & Scheduling Engine",
+text: `<p>This process diagram maps the step-by-step logical execution, control loops, and validation checks required to convert field inputs into actionable planting advice.</p>
+        <p>Phase 1 detail: The process validates incoming user parameters (soil pH, location, crops) and fetches corresponding microclimate and soil baseline records from the cached feature store.</p>
+        <p>Phase 2 detail: The engine executes companion compatibility algorithms, evaluates agronomic rules (e.g., nitrogen fixers paired with heavy feeders), and filters out invalid combinations based on seasonal activity windows.</p>
+        <p>Phase 3 detail: The process constructs the optimized crop list, compiles the daily task schedule, and serves the formatted payload to the client interface.</p>`,
 code: `flowchart TD
     %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#EEEDFE', 'primaryBorderColor': '#534AB7', 'primaryTextColor': '#26215C', 'lineColor': '#888780', 'secondaryColor': '#E1F5EE', 'fontSize': '13px'}}}%%
 
-    subgraph Step_1 [1. Operational Data Extraction]
-        EXPORT["Export Role Tasks & Kanban Backlog to CSV/JSON"] ---> READ["Identify Core Task Specifications & Frequency"]
+    subgraph Phase_1 [1. Logic Trigger & Parameter Validation]
+        START([User Submits Site & Crop Selection]) ---> VAL_INPUT{Validate Inputs: pH, Type & Location Valid?}
+        VAL_INPUT -- No --> ERR_INPUT[Return Validation Warning to UI]
+        VAL_INPUT -- Yes --> FETCH_FEAT[Query Feature Tables for Soil & Microclimate Baselines]
     end
 
-    subgraph Step_2 [2. Structured AI Language Audit]
-        READ ---> PROMPT["Feed CSV into LLM with Task Audit Framework"]
-        PROMPT --> EVAL_LANG["Evaluate CEFR Requirement per Task (A1–C1)"]
-        EVAL_LANG --> EVAL_TECH["Assess Translation Tech Feasibility (DeepL/LLMs)"]
+    subgraph Phase_2 [2. Agronomic & Companion Logic Processing]
+        FETCH_FEAT ---> MATCH_COMP[Evaluate Companion Species Matrix]
+        MATCH_COMP --> CHK_WEATHER{Are Seasonal & Weather Windows Favorable?}
+        CHK_WEATHER -- No --> ALT_CROPS[Flag Non-Optimal Crops & Suggest Alternatives]
+        CHK_WEATHER -- Yes --> SCORE_PAIRS[Score & Rank Compatible Plant Groups]
+        ALT_CROPS --> SCORE_PAIRS
     end
 
-    subgraph Step_3 [3. Task Classification & Decision]
-        EVAL_TECH ---> COND_C1{"Requires C1 Live Native Fluency?"}
-        COND_C1 -- "Yes (Legal / Safety)" --> HIGH_LANG["Isolate High-Fluency Task"]
-        COND_C1 -- "No (Async / Technical)" --> TECH_LANG["Map to A1-B1 or Tech-Assisted Task"]
+    subgraph Phase_3 [3. Schedule Generation & Payload Response]
+        SCORE_PAIRS ---> BUILD_LIST[Compile Final Plant Recommendation List]
+        BUILD_LIST --> GEN_TASKS[Generate Date-Stamped Daily Action Items]
+        GEN_TASKS --> RESP_UI([Serve Structured JSON Payload to UI])
     end
 
-    subgraph Step_4 [4. Role Re-Sorting & System Optimization]
-        HIGH_LANG ---> UNBUNDLE["Unbundle: Shift C1 Tasks to Fluent Team Member"]
-        TECH_LANG ---> TOOL_ENABLE["Enable Enterprise Translation & Async Workflows"]
-        UNBUNDLE --> BALANCE["Re-balance Role with Non-Language Intensive Detail"]
-        TOOL_ENABLE --> FINAL_ROLE["Publish Re-Sorted, Equitable Role Blueprint"]
-        BALANCE --> FINAL_ROLE
-    end
+    classDef validation fill:#FBE6E8,stroke:#A61C1C,color:#5C0A0A
+    classDef processing fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef response fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
 
-    classDef dataInput fill:#FAEEDA,stroke:#854F0B,color:#412402
-    classDef aiEngine fill:#E1F5EE,stroke:#0F6E56,color:#04342C
-    classDef techTask fill:#EEEDFE,stroke:#534AB7,color:#26215C
-    classDef highLang fill:#FBE6E8,stroke:#A61C1C,color:#5C0A0A
-    classDef strategy fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
-
-    class EXPORT,READ dataInput
-    class PROMPT,EVAL_LANG,EVAL_TECH aiEngine
-    class TECH_LANG,TOOL_ENABLE techTask
-    class HIGH_LANG highLang
-    class COND_C1,UNBUNDLE,BALANCE,FINAL_ROLE strategy`
+    class START,VAL_INPUT,ERR_INPUT,FETCH_FEAT validation
+    class MATCH_COMP,CHK_WEATHER,ALT_CROPS,SCORE_PAIRS processing
+    class BUILD_LIST,GEN_TASKS,RESP_UI response`
     
