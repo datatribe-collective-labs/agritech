@@ -2,7 +2,7 @@
 
 ## Values & Governance
 
-This project operates within a framework that couples localised market trade with human and ecological stewardship:
+This project operates from a place that couples localised market trade with human and ecological stewardship:
 
 * **[VALUES_AND_GOVERNANCE](./docs/values_and_governance.md)** — Our shared understanding of financial risk, data sovereignty, and designing for human-scale context over extractive scale.
 
