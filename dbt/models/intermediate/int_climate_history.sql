@@ -1,4 +1,4 @@
--- Aggregates 10 years of daily NASA data into annual and
+-- Aggregates 10 years of daily NASA data into annual &
 -- seasonal climate summaries per city.
 --
 -- PURPOSE:

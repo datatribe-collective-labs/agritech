@@ -1,0 +1,63 @@
+{
+  "model_type": "XGBoost multi-output classifier",
+  "grain": "annual (one row per city)",
+  "n_training_rows": 54,
+  "n_features": 27,
+  "feature_cols": [
+    "soil_ph",
+    "clay_pct",
+    "sand_pct",
+    "silt_pct",
+    "organic_carbon_g_kg",
+    "nitrogen_g_kg",
+    "water_retention_score",
+    "nitrogen_deficient_flag",
+    "avg_annual_precip_mm",
+    "avg_frost_days_per_year",
+    "est_growing_season_days",
+    "avg_annual_gdd",
+    "temp_variability_c",
+    "climate_zone_ordinal",
+    "aridity_index",
+    "current_water_deficit_mm",
+    "irrigation_needed_flag",
+    "needs_legume_companion",
+    "needs_drought_tolerant_companion",
+    "soil_feature_completeness",
+    "climate_feature_completeness",
+    "soil_texture_class",
+    "climate_zone",
+    "gdd_crop_class",
+    "ph_band",
+    "rainfall_band",
+    "water_stress_category"
+  ],
+  "targets": [
+    "top_species_1",
+    "top_species_2",
+    "top_species_3"
+  ],
+  "cv_scores": {
+    "top_species_1": 0.5925925925925926,
+    "top_species_2": 0.5,
+    "top_species_3": 0.3888888888888889
+  },
+  "xgboost_params": {
+    "max_depth": 3,
+    "learning_rate": 0.1,
+    "n_estimators": 100,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.1,
+    "tree_method": "hist",
+    "enable_categorical": true,
+    "eval_metric": "mlogloss",
+    "random_state": 42,
+    "verbosity": 0
+  },
+  "trained_at": "20260828_200428",
+  "model_path": "C:\\Users\\Hunter\\Documents\\datatribe\\agritech\\ml\\saved_models\\annual_models_20260828_200428.pkl",
+  "encoders_path": "C:\\Users\\Hunter\\Documents\\datatribe\\agritech\\ml\\saved_models\\annual_encoders_20260828_200428.pkl"
+}

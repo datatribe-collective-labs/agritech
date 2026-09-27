@@ -1,0 +1,181 @@
+{
+  "comparison_run_at": "20260828_193545",
+  "n_cities": 54,
+  "cv_strategy": "LeaveOneOut (gold standard for n<100)",
+  "selection_criteria": {
+    "primary": "Top-3 CV accuracy (40 points)",
+    "secondary": "Top-1 CV accuracy (30 points)",
+    "tertiary": "SHAP compatibility (20 points)",
+    "quaternary": "Native null handling (10 points)"
+  },
+  "winners": {
+    "top_species_1": {
+      "winner": "XGBoost",
+      "total_score": 97.43,
+      "top1_cv_accuracy": 0.5926,
+      "top3_cv_accuracy": 0.9444,
+      "shap_compatible": true,
+      "handles_nulls": true,
+      "scoring_weights": {
+        "top3_accuracy": "40 points \u2014 primary metric for polyculture",
+        "top1_accuracy": "30 points \u2014 precision of single recommendation",
+        "shap_compat": "20 points \u2014 explainability required for farmers",
+        "null_handling": "10 points \u2014 soil_ph NULL for most cities"
+      },
+      "runner_up": "Random Forest",
+      "scores_table": [
+        {
+          "model": "XGBoost",
+          "top1_cv_accuracy": 0.5926,
+          "top3_cv_accuracy": 0.9444,
+          "total_score": 97.43095201357815
+        },
+        {
+          "model": "Random Forest",
+          "top1_cv_accuracy": 0.6481,
+          "top3_cv_accuracy": 0.9259,
+          "total_score": 89.21643371452774
+        },
+        {
+          "model": "Logistic Regression",
+          "top1_cv_accuracy": 0.6111,
+          "top3_cv_accuracy": 0.9074,
+          "total_score": 66.72016877144091
+        },
+        {
+          "model": "K-Nearest Neighbours",
+          "top1_cv_accuracy": 0.6481,
+          "top3_cv_accuracy": 0.9259,
+          "total_score": 69.21643371452774
+        }
+      ]
+    },
+    "top_species_2": {
+      "winner": "XGBoost",
+      "total_score": 89.44,
+      "top1_cv_accuracy": 0.5,
+      "top3_cv_accuracy": 0.7593,
+      "shap_compatible": true,
+      "handles_nulls": true,
+      "scoring_weights": {
+        "top3_accuracy": "40 points \u2014 primary metric for polyculture",
+        "top1_accuracy": "30 points \u2014 precision of single recommendation",
+        "shap_compat": "20 points \u2014 explainability required for farmers",
+        "null_handling": "10 points \u2014 soil_ph NULL for most cities"
+      },
+      "runner_up": "Random Forest",
+      "scores_table": [
+        {
+          "model": "XGBoost",
+          "top1_cv_accuracy": 0.5,
+          "top3_cv_accuracy": 0.7593,
+          "total_score": 89.44020230514886
+        },
+        {
+          "model": "Random Forest",
+          "top1_cv_accuracy": 0.6111,
+          "top3_cv_accuracy": 0.8148,
+          "total_score": 87.44485294117646
+        },
+        {
+          "model": "Logistic Regression",
+          "top1_cv_accuracy": 0.6111,
+          "top3_cv_accuracy": 0.8704,
+          "total_score": 70.0
+        },
+        {
+          "model": "K-Nearest Neighbours",
+          "top1_cv_accuracy": 0.537,
+          "top3_cv_accuracy": 0.7222,
+          "total_score": 59.55163573161224
+        }
+      ]
+    }
+  },
+  "all_results": {
+    "top_species_1": [
+      {
+        "model": "XGBoost",
+        "top1_cv_accuracy": 0.5926,
+        "top3_cv_accuracy": 0.9444,
+        "training_time_s": 0.224,
+        "inference_time_ms": 12.312,
+        "shap_compatible": true,
+        "handles_nulls": true,
+        "notes": "Current baseline. Native null handling, best SHAP support."
+      },
+      {
+        "model": "Random Forest",
+        "top1_cv_accuracy": 0.6481,
+        "top3_cv_accuracy": 0.9259,
+        "training_time_s": 1.178,
+        "inference_time_ms": 84.645,
+        "shap_compatible": true,
+        "handles_nulls": false,
+        "notes": "Strong ensemble for small datasets. No native null handling."
+      },
+      {
+        "model": "Logistic Regression",
+        "top1_cv_accuracy": 0.6111,
+        "top3_cv_accuracy": 0.9074,
+        "training_time_s": 0.042,
+        "inference_time_ms": 3.147,
+        "shap_compatible": false,
+        "handles_nulls": false,
+        "notes": "Linear baseline. If this wins, data is linearly separable."
+      },
+      {
+        "model": "K-Nearest Neighbours",
+        "top1_cv_accuracy": 0.6481,
+        "top3_cv_accuracy": 0.9259,
+        "training_time_s": 0.002,
+        "inference_time_ms": 152.083,
+        "shap_compatible": false,
+        "handles_nulls": false,
+        "notes": "Intuitive: cities with similar climates grow similar crops."
+      }
+    ],
+    "top_species_2": [
+      {
+        "model": "XGBoost",
+        "top1_cv_accuracy": 0.5,
+        "top3_cv_accuracy": 0.7593,
+        "training_time_s": 1.45,
+        "inference_time_ms": 13.498,
+        "shap_compatible": true,
+        "handles_nulls": true,
+        "notes": "Current baseline. Native null handling, best SHAP support."
+      },
+      {
+        "model": "Random Forest",
+        "top1_cv_accuracy": 0.6111,
+        "top3_cv_accuracy": 0.8148,
+        "training_time_s": 0.775,
+        "inference_time_ms": 76.785,
+        "shap_compatible": true,
+        "handles_nulls": false,
+        "notes": "Strong ensemble for small datasets. No native null handling."
+      },
+      {
+        "model": "Logistic Regression",
+        "top1_cv_accuracy": 0.6111,
+        "top3_cv_accuracy": 0.8704,
+        "training_time_s": 0.011,
+        "inference_time_ms": 3.002,
+        "shap_compatible": false,
+        "handles_nulls": false,
+        "notes": "Linear baseline. If this wins, data is linearly separable."
+      },
+      {
+        "model": "K-Nearest Neighbours",
+        "top1_cv_accuracy": 0.537,
+        "top3_cv_accuracy": 0.7222,
+        "training_time_s": 0.019,
+        "inference_time_ms": 7.057,
+        "shap_compatible": false,
+        "handles_nulls": false,
+        "notes": "Intuitive: cities with similar climates grow similar crops."
+      }
+    ]
+  }
+}

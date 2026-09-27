@@ -1,0 +1,9 @@
+xgboost==2.0.3     
+shap==0.45.0           
+scikit-learn==1.4.2    
+pandas==2.2.2           
+numpy==1.26.4          
+sqlalchemy==2.0.30      
+psycopg2-binary==2.9.9  
+matplotlib==3.8.4       
+LightGBM==4.4.0            
