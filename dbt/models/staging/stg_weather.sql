@@ -12,6 +12,7 @@
 
 {{ config(materialized='view') }}
 
+
 WITH latest_per_city AS (
     SELECT
         city,

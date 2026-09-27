@@ -1,0 +1,100 @@
+{
+  "model_type": "XGBoost seasonal multi-output classifier",
+  "grain": "seasonal (one row per city \u00d7 month)",
+  "n_training_rows": 648,
+  "n_features": 32,
+  "n_cities": 54,
+  "feature_cols": [
+    "avg_temp_c",
+    "avg_max_temp_c",
+    "avg_min_temp_c",
+    "avg_monthly_precip_mm",
+    "avg_solar_radiation_mj",
+    "avg_humidity_pct",
+    "avg_daily_gdd",
+    "avg_monthly_gdd",
+    "avg_frost_days_in_month",
+    "dry_day_fraction",
+    "temp_seasonal_ratio",
+    "precip_seasonal_ratio",
+    "solar_seasonal_ratio",
+    "ph_x_temperature",
+    "nitrogen_x_rainfall",
+    "clay_x_rainfall",
+    "gdd_x_solar",
+    "is_frost_free_month",
+    "is_high_rainfall_month",
+    "is_good_planting_month",
+    "tropical_crop_viable",
+    "cool_season_crop_viable",
+    "water_stress_flag",
+    "nitrogen_deficient_flag",
+    "irrigation_needed_flag",
+    "month",
+    "monthly_feature_completeness",
+    "climate_zone",
+    "soil_texture_class",
+    "local_season",
+    "water_stress_category",
+    "gdd_crop_class"
+  ],
+  "targets": [
+    "top_species_1",
+    "top_species_2",
+    "top_species_3"
+  ],
+  "cv_scores": {
+    "top_species_1": {
+      "mean": 0.6189,
+      "std": 0.0386,
+      "folds": [
+        0.5606,
+        0.6591,
+        0.6591,
+        0.5909,
+        0.625
+      ]
+    },
+    "top_species_2": {
+      "mean": 0.443,
+      "std": 0.0371,
+      "folds": [
+        0.3712,
+        0.4621,
+        0.4545,
+        0.4773,
+        0.45
+      ]
+    },
+    "top_species_3": {
+      "mean": 0.3611,
+      "std": 0.0281,
+      "folds": [
+        0.3712,
+        0.3333,
+        0.3333,
+        0.4091,
+        0.3583
+      ]
+    }
+  },
+  "cv_strategy": "GroupKFold (groups=city, n_splits=5, fold-specific target encoding)",
+  "xgboost_params": {
+    "max_depth": 4,
+    "learning_rate": 0.08,
+    "n_estimators": 150,
+    "subsample": 0.8,
+    "colsample_bytree": 0.7,
+    "min_child_weight": 8,
+    "reg_lambda": 1.5,
+    "reg_alpha": 0.2,
+    "tree_method": "hist",
+    "enable_categorical": true,
+    "eval_metric": "mlogloss",
+    "random_state": 42,
+    "verbosity": 0
+  },
+  "trained_at": "20260828_195937",
+  "model_path": "C:\\Users\\Hunter\\Documents\\datatribe\\agritech\\ml\\saved_models\\seasonal_models_20260828_195937.pkl",
+  "encoders_path": "C:\\Users\\Hunter\\Documents\\datatribe\\agritech\\ml\\saved_models\\seasonal_encoders_20260828_195937.pkl"
+}
