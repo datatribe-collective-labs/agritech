@@ -13,6 +13,7 @@ if SCRIPTS_DIR not in sys.path:
 
 import requests
 import pandas as pd
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from db_utils import get_engine
 from shared_locations import GLOBAL_LOCATIONS
@@ -82,6 +83,7 @@ def fetch_weather_all():
         return
 
     print(f"[weather] Fetched {len(df)} rows.")
+    df["ingested_at"] = datetime.now(timezone.utc)
     engine = get_engine()
     df.to_sql("weather", engine, if_exists="append", index=False)
     print(f"[weather] Saved {len(df)} rows to Postgres table 'weather'.")

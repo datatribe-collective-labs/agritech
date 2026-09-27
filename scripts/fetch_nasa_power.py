@@ -34,6 +34,7 @@ import pandas as pd
 import time
 from sqlalchemy import text
 from db_utils import get_engine
+from datetime import datetime, timezone
 from shared_locations import GLOBAL_LOCATIONS
 
 NASA_URL   = "https://power.larc.nasa.gov/api/temporal/daily/point"
@@ -147,6 +148,7 @@ def _save_batch(rows):
     if not rows:
         return
     df = pd.DataFrame(rows)
+    df["ingested_at"] = datetime.now(timezone.utc)
     engine = get_engine()
 
     with engine.begin() as conn:
