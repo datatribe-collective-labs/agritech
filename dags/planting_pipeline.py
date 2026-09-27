@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta
 
 # Tell Python where to find fetch_*.py and db_utils.py
-SCRIPTS_PATH = "/opt/airflow/scripts"
+SCRIPTS_PATH = "/root/agritech/scripts"
 if SCRIPTS_PATH not in sys.path:
     sys.path.insert(0, SCRIPTS_PATH)
 
@@ -82,7 +82,7 @@ with DAG(
     task_soil = PythonOperator(
         task_id="fetch_soil",
         python_callable=run_fetch_soil,
-        execution_timeout=timedelta(minutes=15),
+        execution_timeout=timedelta(minutes=30),
     )
 
     task_weather = PythonOperator(

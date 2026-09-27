@@ -14,6 +14,7 @@ if SCRIPTS_DIR not in sys.path:
 # Import dependencies
 import requests
 import pandas as pd
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from db_utils import get_engine
 from shared_locations import GLOBAL_LOCATIONS
@@ -102,6 +103,7 @@ def fetch_water():
     precip_df = pd.DataFrame([r for r in precip_results if r is not None])
     river_df  = pd.DataFrame([r for r in river_results  if r is not None])
     df = precip_df.merge(river_df, on="city", how="left")
+    df["ingested_at"] = datetime.now(timezone.utc)
 
     print(f"[water] Fetched {len(df)} rows.")#
     engine = get_engine()
