@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: dim_date
+    columns:
+      - name: full_date
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_location
+    columns:
+      - name: location_key
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_soil_condition
+    columns:
+      - name: soil_key
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_species
+    columns:
+      - name: species_key
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_water_condition
+    columns:
+      - name: water_key
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_weather_condition
+    columns:
+      - name: weather_key
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_planting_observations
+    columns:
+      - name: plant_occurrence_id
+        tests:
+          - not_null
+          # worth checking: is plant_occurrence_id alone meant to be unique
+          # on the fact table, or should the grain be (plant_occurrence_id, date_key)?
+          # if the fact table can have one row per observation per date, a bare
+          # `unique` here will false-positive — use dbt_utils.unique_combination_of_columns instead:
+          # - dbt_utils.unique_combination_of_columns:
+          #     combination_of_columns:
+          #       - plant_occurrence_id
+          #       - date_key
