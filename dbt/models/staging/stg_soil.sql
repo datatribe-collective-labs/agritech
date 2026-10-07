@@ -1,7 +1,11 @@
--- Soil composition per city (ISRIC SoilGrids, 0-5 cm depth). Latest row per city.
--- Raw SoilGrids units are converted to everyday units:
---   clay/sand/silt: g/kg -> %      pH: tenths -> pH units
---   organic carbon: dg/kg -> g/kg  nitrogen: cg/kg -> g/kg
+-- Soil per city, top layer (0-5 cm). Latest row per city.
+-- Source: ISRIC WoSIS field-measured soil profiles. For each city the fetch script averages
+-- the profiles found within about 55 km (widened to about 220 km if none), weighted by
+-- distance. So these are estimates from nearby measurements, not the city's own soil.
+-- A property with no measurement in that area is left empty (for example pH for Berlin).
+-- The fetch script stores values scaled up; this model scales them back to everyday units:
+--   clay/sand/silt: x10 -> %      pH: x10 -> pH units
+--   organic carbon: x10 -> g/kg   nitrogen: x100 -> g/kg
 
 {{ config(materialized='view') }}
 
