@@ -27,7 +27,7 @@ models:
         tests:
           - not_null
       - name: soil_ph
-        description: Soil pH 0-14. Empty when SoilGrids returned no valid reading (never guessed).
+        description: Soil pH 0-14. Empty when no nearby WoSIS profile has a pH measurement (never guessed).
       - name: current_conditions_score
         description: 100 minus penalty points for today's frost, heat, water stress, low nitrogen and flood risk (10-100). Same in all 12 months of a city.
         tests:
