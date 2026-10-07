@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
 ## WoSIS API details
 WOSIS_URL = "https://graphql.isric.org/wosis/graphql"
 
-# Look for nearby profiles within ~55km (0.5deg) first, then widen to ~220km (2.0deg)
-# Without it, many cities with no nearby profiles would return no soil data, even though usable profiles exist slightly farther away.
-BOX_SIZES_DEG = [0.5, 2.0]
+# Look for nearby profiles within ~55km (0.5deg) first. If any property is still missing,
+# widen to a ring of eight neighbouring 1-degree tiles around the city (reaching ~165km).
+# Tiles are used instead of one large box because WoSIS returns at most 20 profiles per query:
+# in a data-rich area one large box returns an arbitrary 20 and can miss the profiles that have a pH reading.
+NEAR_BOX_DEG = 0.5
+TILE_HALF_WIDTH_DEG = 0.5
+TILE_OFFSETS_DEG = (-1.0, 0.0, 1.0)
+WIDE_REACH_DEG = max(TILE_OFFSETS_DEG) + TILE_HALF_WIDTH_DEG
 
 # WoSIS API limits the number of profiles returned per query to 20, and the number of layers per profile to 3.
 MAX_PROFILES_PER_QUERY = 20  
@@ -168,23 +173,41 @@ def missing_properties(profiles, lat, lon):
     ]
 
 
+def fetch_wide_area(lat, lon):
+    """
+    Profiles from the 3 x 3 grid of 1-degree tiles centred on the city, without duplicates.
+    A tile that comes back full (20 profiles) may have more profiles than were returned.
+    """
+    found = {}
+    for dy in TILE_OFFSETS_DEG:
+        for dx in TILE_OFFSETS_DEG:
+            tile = query_wosis_box(lat + dy, lon + dx, TILE_HALF_WIDTH_DEG)
+            if len(tile) >= MAX_PROFILES_PER_QUERY:
+                logger.info(f"  Tile ({dy:+.0f}, {dx:+.0f}) is full - more profiles may exist than were returned")
+            for p in tile:
+                found[p["profileId"]] = p
+    return list(found.values())
+
+
 # Fetch soil data for a specific city
 def fetch_soil_for_city(city_name, lat, lon):
     """
-    Returns a list of (box_degrees, profiles), from the smallest search box to the widest used.
+    Returns a list of (reach_degrees, profiles), nearest search first.
 
-    The search widens when the small box has no profiles OR when some property (for example pH)
+    The wider search runs when the near box has no profiles OR when some property (for example pH)
     has no measurement in it. Widening only for "no profiles" left pH empty for cities where
     nearby profiles existed but none had a pH reading.
     """
     levels = []
-    for box_deg in BOX_SIZES_DEG:
-        profiles = query_wosis_box(lat, lon, box_deg)
-        if profiles:
-            levels.append((box_deg, profiles))
-            if not missing_properties(profiles, lat, lon):
-                break
-        logger.info(f"  Not enough data within {box_deg}deg - widening")
+    near = query_wosis_box(lat, lon, NEAR_BOX_DEG)
+    if near:
+        levels.append((NEAR_BOX_DEG, near))
+        if not missing_properties(near, lat, lon):
+            return levels
+    logger.info(f"  Not enough data within {NEAR_BOX_DEG}deg - searching the surrounding tiles")
+    wide = fetch_wide_area(lat, lon)
+    if wide:
+        levels.append((WIDE_REACH_DEG, wide))
     return levels
 
 
