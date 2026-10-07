@@ -1,225 +1,158 @@
--- ML Feature Table A — Annual / Location-level
+-- ML feature table A: one row per city. "Which crops suit this location year-round?"
 --
--- GRAIN: one row per city
--- PURPOSE: "What species suit this location year-round?"
---
--- ML TASK: Multi-label classification
---   Input:  static soil + long-term climate features
---   Output: species suitability scores (which crops can grow here)
---
--- FEATURE GROUPS:
---   1. Identity        — city, country, coordinates
---   2. Soil            — texture, pH, nitrogen, carbon
---   3. Long-term climate — zone, GDD class, annual rainfall, frost days
---   4. Water balance   — aridity, irrigation need
---   5. Derived flags   — binary signals for ML categorical features
---   6. Target labels   — what the model should predict
+-- GRAIN: one row per city.
+-- Inputs: soil, long-term climate and today's water balance (identical in every month,
+-- so we take them from any one month of mart_planting_features).
+-- Labels: top_species_1..3 = the crops most often recorded near the city over the whole
+-- year (not one arbitrary month).
 
 {{ config(materialized='table') }}
 
-WITH base AS (
-    -- Use the month with the most species observations per city.
-    
+WITH city_row AS (
     SELECT *
     FROM (
-        SELECT *,
-            ROW_NUMBER() OVER (
-                PARTITION BY city
-                ORDER BY
-                    CASE WHEN top_species_1 IS NOT NULL THEN 0 ELSE 1 END,
-                    planting_suitability_score DESC
-            ) AS rn
-        FROM {{ ref('mart_planting_features') }}
-    ) ranked
+        SELECT f.*, ROW_NUMBER() OVER (PARTITION BY city ORDER BY month) AS rn
+        FROM {{ ref('mart_planting_features') }} f
+    ) x
     WHERE rn = 1
 ),
 
--- Pull species trait enrichment for target encoding
-species_traits AS (
+species_year AS (
     SELECT
-        species,
-        nitrogen_role,
-        root_depth_class,
-        functional_group,
-        drought_tolerance,
-        frost_hardy,
-        optimal_ph_min,
-        optimal_ph_max,
-        optimal_temp_min_c,
-        optimal_temp_max_c
-    FROM {{ ref('dim_species') }}
-    WHERE species IS NOT NULL
+        city, species, MAX(family) AS family, SUM(observation_count) AS observations,
+        ROW_NUMBER() OVER (
+            PARTITION BY city ORDER BY SUM(observation_count) DESC, species
+        ) AS species_rank
+    FROM {{ ref('int_city_species_presence') }}
+    GROUP BY city, species
+),
+
+annual_labels AS (
+    SELECT
+        city,
+        MAX(CASE WHEN species_rank = 1 THEN species END) AS top_species_1,
+        MAX(CASE WHEN species_rank = 1 THEN family  END) AS top_family_1,
+        MAX(CASE WHEN species_rank = 2 THEN species END) AS top_species_2,
+        MAX(CASE WHEN species_rank = 2 THEN family  END) AS top_family_2,
+        MAX(CASE WHEN species_rank = 3 THEN species END) AS top_species_3,
+        MAX(CASE WHEN species_rank = 3 THEN family  END) AS top_family_3
+    FROM species_year
+    WHERE species_rank <= 3
+    GROUP BY city
+),
+
+species_traits AS (
+    SELECT species, nitrogen_role, root_depth_class, functional_group,
+           drought_tolerance, frost_hardy
+    FROM {{ ref('dim_plant_traits') }}
 )
 
 SELECT
-    -- IDENTITY
-    
     base.city,
     base.country,
     base.latitude,
     base.longitude,
 
-    -- SOIL FEATURES
-
+    -- SOIL
     base.soil_ph,
     base.clay_pct,
     base.sand_pct,
     base.silt_pct,
     base.organic_carbon_g_kg,
     base.nitrogen_g_kg,
-    base.soil_texture_class,        
+    base.soil_texture_class,
+    {{ ph_band('base.soil_ph') }}    AS ph_band,
+    CASE WHEN base.nitrogen_deficient THEN 1 ELSE 0 END AS nitrogen_deficient_flag,
 
-    -- Binary encoding of nitrogen status — cleaner for tree models
-    -- than the boolean nitrogen_deficient column
-    CASE WHEN base.nitrogen_deficient = TRUE THEN 1 ELSE 0 END
-                                     AS nitrogen_deficient_flag,
-
-    -- pH suitability bands
-    CASE
-        WHEN base.soil_ph < 5.5 THEN 'strongly_acidic'
-        WHEN base.soil_ph < 6.5 THEN 'moderately_acidic'
-        WHEN base.soil_ph < 7.5 THEN 'neutral'
-        WHEN base.soil_ph < 8.5 THEN 'alkaline'
-        ELSE 'strongly_alkaline'
-    END                              AS ph_band,
-
-    -- Soil water retention — derived from texture, key for irrigation
+    -- Soil water retention, 1 (sandy, drains fast) to 5 (clay, holds water); empty if unknown
     CASE base.soil_texture_class
-        WHEN 'sandy'      THEN 1    -- low retention
+        WHEN 'sandy'      THEN 1
         WHEN 'sandy_loam' THEN 2
-        WHEN 'loam'       THEN 3    -- medium retention
+        WHEN 'loam'       THEN 3
         WHEN 'clay_loam'  THEN 4
         WHEN 'silty'      THEN 4
-        WHEN 'clay'       THEN 5    -- high retention
-        ELSE 3
+        WHEN 'clay'       THEN 5
     END                              AS water_retention_score,
 
-    -- LONG-TERM CLIMATE FEATURES
-    -- 10-year NASA historical aggregates — stable and reliable.
-
-    base.climate_zone,               -- categorical: tropical, temperate etc.
-    base.gdd_crop_class,             -- categorical: cool_season, mixed, tropical
+    -- LONG-TERM CLIMATE (10-year NASA averages)
+    base.frost_zone,
+    -- 1 = severe_frost ... 5 = frost_free
+    CASE base.frost_zone
+        WHEN 'severe_frost'   THEN 1
+        WHEN 'heavy_frost'    THEN 2
+        WHEN 'moderate_frost' THEN 3
+        WHEN 'light_frost'    THEN 4
+        WHEN 'frost_free'     THEN 5
+    END                              AS frost_zone_ordinal,
+    base.crop_heat_class,
     base.avg_annual_precip_mm,
+    {{ rainfall_band('base.avg_annual_precip_mm') }} AS rainfall_band,
     base.avg_frost_days_per_year,
-    base.est_growing_season_days,
+    base.frost_free_days_per_year,
     base.avg_annual_gdd,
-    base.temp_variability_c,         -- how unpredictable is the climate?
+    base.temp_variability_c,
 
-    -- Climate zone encoded as ordinal (for models that need numbers)
-    CASE base.climate_zone
-        WHEN 'subarctic'   THEN 1
-        WHEN 'continental' THEN 2
-        WHEN 'temperate'   THEN 3
-        WHEN 'subtropical' THEN 4
-        WHEN 'tropical'    THEN 5
-        ELSE 3
-    END                              AS climate_zone_ordinal,
-
-    -- Annual rainfall band — aligns with FAO aridity classification
-    CASE
-        WHEN base.avg_annual_precip_mm < 250  THEN 'hyper_arid'
-        WHEN base.avg_annual_precip_mm < 500  THEN 'arid'
-        WHEN base.avg_annual_precip_mm < 750  THEN 'semi_arid'
-        WHEN base.avg_annual_precip_mm < 1200 THEN 'sub_humid'
-        ELSE                                       'humid'
-    END                              AS rainfall_band,
-
-    -- CURRENT WATER BALANCE
-    -- Snapshot of current irrigation need — short-term signal.
-
-    base.aridity_index,
+    -- WATER BALANCE (this week's forecast, not long-term)
+    base.forecast_rain_to_evap_ratio,
     base.water_stress_category,
-    base.current_water_deficit_mm,
-    CASE WHEN base.irrigation_needed = TRUE THEN 1 ELSE 0 END
-                                     AS irrigation_needed_flag,
+    base.water_deficit_mm_per_day,
+    CASE WHEN base.irrigation_needed THEN 1 ELSE 0 END AS irrigation_needed_flag,
+    CASE WHEN base.water_stress_category IN ('severe', 'moderate') THEN 1 ELSE 0 END
+                                     AS water_stress_flag,
 
-    -- Polyculture combinations per suit the location
-
+    -- COMPANION PAIR FOR THE CITY
     base.companion_species_a,
     base.companion_species_b,
     base.companion_mechanism,
     base.companion_benefit,
+    base.companion_evidence,
 
-    -- Does the location's soil need nitrogen input?
-    -- Key driver of legume companion recommendations.
-    CASE WHEN base.nitrogen_deficient = TRUE THEN 1 ELSE 0 END
-                                     AS needs_legume_companion,
+    -- LABELS: crops most often recorded near the city over the year
+    lab.top_species_1,
+    lab.top_family_1,
+    lab.top_species_2,
+    lab.top_family_2,
+    lab.top_species_3,
+    lab.top_family_3,
 
-    -- Does current irrigation need suggest drought-tolerant pairs?
-    CASE
-        WHEN base.water_stress_category IN ('severe', 'moderate') THEN 1
-        ELSE 0
-    END                              AS needs_drought_tolerant_companion,
+    -- Traits of the top crops (nitrogen role, root depth, ...) for explanations
+    s1.nitrogen_role      AS top_species_1_nitrogen_role,
+    s1.root_depth_class   AS top_species_1_root_depth,
+    s1.functional_group   AS top_species_1_functional_group,
+    s1.drought_tolerance  AS top_species_1_drought_tolerance,
+    s1.frost_hardy        AS top_species_1_frost_hardy,
+    s2.nitrogen_role      AS top_species_2_nitrogen_role,
+    s2.root_depth_class   AS top_species_2_root_depth,
+    s2.functional_group   AS top_species_2_functional_group,
+    s3.nitrogen_role      AS top_species_3_nitrogen_role,
+    s3.root_depth_class   AS top_species_3_root_depth,
+    s3.functional_group   AS top_species_3_functional_group,
 
-    -- TARGET LABELS
+    -- DATA COMPLETENESS (how many of the soil / climate inputs are filled in)
+    (CASE WHEN base.soil_ph IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.clay_pct IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.sand_pct IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.nitrogen_g_kg IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.organic_carbon_g_kg IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.soil_texture_class IS NOT NULL THEN 1 ELSE 0 END
+    )                                AS soil_feature_completeness,      -- 0 to 6
+    (CASE WHEN base.avg_annual_precip_mm IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.avg_frost_days_per_year IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.avg_annual_gdd IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.frost_zone IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN base.temp_variability_c IS NOT NULL THEN 1 ELSE 0 END
+    )                                AS climate_feature_completeness,   -- 0 to 5
 
-    base.top_species_1,
-    base.top_family_1,
-    base.top_species_2,
-    base.top_family_2,
-    base.top_species_3,
-    base.top_family_3,
+    -- Usable for training: has a label, a soil pH and a frost zone
+    (lab.top_species_1 IS NOT NULL
+     AND base.soil_ph IS NOT NULL
+     AND base.frost_zone IS NOT NULL) AS is_ml_ready,
 
-    -- Enrich target with nitrogen role: tells model if the top species
-    -- is a nitrogen fixer, consumer, or neutral
-    s1.nitrogen_role               AS top_species_1_nitrogen_role,
-    s1.root_depth_class            AS top_species_1_root_depth,
-    s1.functional_group            AS top_species_1_functional_group,
-    s1.drought_tolerance           AS top_species_1_drought_tolerance,
-    s1.frost_hardy                 AS top_species_1_frost_hardy,
-
-    s2.nitrogen_role               AS top_species_2_nitrogen_role,
-    s2.root_depth_class            AS top_species_2_root_depth,
-    s2.functional_group            AS top_species_2_functional_group,
-
-    s3.nitrogen_role               AS top_species_3_nitrogen_role,
-    s3.root_depth_class            AS top_species_3_root_depth,
-    s3.functional_group            AS top_species_3_functional_group,
-
-    -- DATA QUALITY FLAGS
-
-    (
-        CASE WHEN base.soil_ph IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.clay_pct IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.sand_pct IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.nitrogen_g_kg IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.organic_carbon_g_kg IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.soil_texture_class IS NOT NULL THEN 1 ELSE 0 END
-    )                              AS soil_feature_completeness,  -- 0-6
-
-    -- How many of the 5 key climate features are populated?
-    (
-        CASE WHEN base.avg_annual_precip_mm IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.avg_frost_days_per_year IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.avg_annual_gdd IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.climate_zone IS NOT NULL THEN 1 ELSE 0 END
-      + CASE WHEN base.avg_annual_precip_mm IS NOT NULL THEN 1 ELSE 0 END
-    )                              AS climate_feature_completeness,  -- 0-5
-
-    -- Has at least one target species been identified?
-    CASE WHEN base.top_species_1 IS NOT NULL THEN 1 ELSE 0 END
-                                   AS has_target_label,
-
-    CASE
-        WHEN base.top_species_1 IS NOT NULL
-         AND base.climate_zone IS NOT NULL
-        THEN TRUE
-        ELSE FALSE
-    END                            AS is_ml_ready,
-
-    -- METADATA
     base.last_updated_at,
-    CURRENT_TIMESTAMP              AS feature_table_built_at
+    CURRENT_TIMESTAMP                AS feature_table_built_at
 
-FROM base
-
-LEFT JOIN species_traits s1
-    ON LOWER(TRIM(base.top_species_1)) = LOWER(TRIM(s1.species))
-
-LEFT JOIN species_traits s2
-    ON LOWER(TRIM(base.top_species_2)) = LOWER(TRIM(s2.species))
-
-LEFT JOIN species_traits s3
-    ON LOWER(TRIM(base.top_species_3)) = LOWER(TRIM(s3.species))
-
-ORDER BY base.city
+FROM city_row base
+LEFT JOIN annual_labels lab ON lab.city = base.city
+LEFT JOIN species_traits s1 ON LOWER(TRIM(lab.top_species_1)) = LOWER(TRIM(s1.species))
+LEFT JOIN species_traits s2 ON LOWER(TRIM(lab.top_species_2)) = LOWER(TRIM(s2.species))
+LEFT JOIN species_traits s3 ON LOWER(TRIM(lab.top_species_3)) = LOWER(TRIM(s3.species))

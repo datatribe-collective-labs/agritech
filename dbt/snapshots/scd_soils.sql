@@ -21,7 +21,7 @@
             'sand_pct',
             'silt_pct',
             'nitrogen_g_kg',
-            'soc_g_kg',
+            'organic_carbon_g_kg',
             'soil_texture_class',
             'nitrogen_deficient'
         ],
@@ -39,7 +39,7 @@ SELECT
     sand_pct,
     silt_pct,
     nitrogen_g_kg,
-    soc_g_kg,
+    organic_carbon_g_kg,
     soil_texture_class,
     nitrogen_deficient,
     ingested_at

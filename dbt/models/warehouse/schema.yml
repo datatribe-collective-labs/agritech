@@ -21,6 +21,11 @@ models:
         tests:
           - unique
           - not_null
+      - name: soil_fertility_points
+        description: Count 0-4 of good soil traits (nitrogen, organic carbon, pH 6-7, loamy texture).
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4]
 
   - name: dim_species
     columns:

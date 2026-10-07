@@ -8,7 +8,7 @@
 -- KEY DERIVED FIELDS:
 --   heat_stress     — temperature above crop tolerance threshold
 --   frost_risk      — temperature at or below freezing
---   growing_conditions — categorical summary for ML feature
+--   temperature_band — cold / cool / optimal / warm / hot
 
 {{ config(materialized='view') }}
 
@@ -49,43 +49,22 @@ WITH latest_per_city AS (
         weather_main,
         LOWER(description)                          AS description,
 
-        -- Derived agronomic flags
-        -- Heat stress: above 35°C damages most crops.
-         -- Heat stress — partially verified, crop-specific caveat.
-        -- The 35°C threshold IS a real, cited figure specifically
-        -- for rice: "exposure to temperatures higher than 35°C at
-        -- flowering induces spikelet sterility" (checked this
-        -- session — Nature Scientific Reports, pollen metabolomics
-        -- study). A separate 43-study meta-analysis found REAL
-        -- thresholds are crop-specific: maize ~37.9°C, rice
-        -- ~37.2°C — close to 35°C — but wheat only ~27.3°C.
-        -- Used to flag locations where shade companions are needed.
-        CASE
-            WHEN temperature_c > 35  THEN TRUE
-            WHEN temperature_c IS NULL THEN NULL
-            ELSE FALSE
-        END                                        AS heat_stress,
+        -- Heat stress: above 35 C. This is the damage point for rice at flowering;
+        -- other crops differ (maize about 38 C, wheat only about 27 C).
+        temperature_c > 35                         AS heat_stress,
 
-        -- Frost risk: at or below 0°C kills most non-hardy crops.
-        -- Frost risk: at or below 0°C — grounded in the actual
-        -- physics of water's freezing point
-        -- Used to restrict planting recommendations to frost-tolerant species.
-        CASE
-            WHEN min_temp_c <= 0     THEN TRUE
-            WHEN min_temp_c IS NULL  THEN NULL
-            ELSE FALSE
-        END                                        AS frost_risk,
+        -- Frost risk: today's minimum temperature is at or below 0 C
+        min_temp_c <= 0                            AS frost_risk,
 
-        -- Growing conditions: a categorical summary for ML.
-        -- NEED VALIDATION
+        -- Temperature band for today (rule of thumb, not crop-specific)
         CASE
-            WHEN temperature_c IS NULL              THEN 'unknown'
-            WHEN temperature_c < 5                  THEN 'cold'
-            WHEN temperature_c BETWEEN 5  AND 15    THEN 'cool'
-            WHEN temperature_c BETWEEN 15 AND 25    THEN 'optimal'
-            WHEN temperature_c BETWEEN 25 AND 35    THEN 'warm'
-            ELSE                                         'hot'
-        END                                        AS growing_conditions,
+            WHEN temperature_c IS NULL THEN 'unknown'
+            WHEN temperature_c < 5     THEN 'cold'
+            WHEN temperature_c < 15    THEN 'cool'
+            WHEN temperature_c < 25    THEN 'optimal'
+            WHEN temperature_c < 35    THEN 'warm'
+            ELSE                            'hot'
+        END                                        AS temperature_band,
 
         ingested_at,
 
@@ -122,7 +101,7 @@ SELECT
     description,
     heat_stress,
     frost_risk,
-    growing_conditions,
+    temperature_band,
     ingested_at
 
 FROM latest_per_city

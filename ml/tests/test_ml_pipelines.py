@@ -57,29 +57,28 @@ def sample_annual_df():
         "nitrogen_deficient_flag":   np.random.randint(0, 2, n),
         "avg_annual_precip_mm":      np.random.uniform(200, 1500, n),
         "avg_frost_days_per_year":   np.random.uniform(0, 100, n),
-        "est_growing_season_days":   np.random.uniform(200, 365, n),
+        "frost_free_days_per_year":  np.random.uniform(200, 365, n),
         "avg_annual_gdd":            np.random.uniform(500, 4000, n),
         "temp_variability_c":        np.random.uniform(1, 8, n),
-        "climate_zone_ordinal":      np.random.randint(1, 6, n),
-        "aridity_index":             np.random.uniform(0.1, 1.0, n),
-        "current_water_deficit_mm":  np.random.uniform(-2, 8, n),
+        "frost_zone_ordinal":        np.random.randint(1, 6, n),
+        "forecast_rain_to_evap_ratio": np.random.uniform(0.1, 1.0, n),
+        "water_deficit_mm_per_day":  np.random.uniform(-2, 8, n),
         "irrigation_needed_flag":    np.random.randint(0, 2, n),
-        "needs_legume_companion":    np.random.randint(0, 2, n),
-        "needs_drought_tolerant_companion": np.random.randint(0, 2, n),
+        "water_stress_flag":         np.random.randint(0, 2, n),
         "soil_feature_completeness": np.random.randint(3, 7, n),
         "climate_feature_completeness": np.random.randint(3, 6, n),
         "soil_texture_class":        np.random.choice(
                                      ["loam","clay","sandy","silty"], n),
-        "climate_zone":              np.random.choice(
-                                     ["tropical","temperate","subtropical"], n),
-        "gdd_crop_class":            np.random.choice(
+        "frost_zone":                np.random.choice(
+                                     ["frost_free","moderate_frost","light_frost"], n),
+        "crop_heat_class":            np.random.choice(
                                      ["cool_season_only","mixed_season",
                                       "tropical_viable"], n),
         "ph_band":                   np.random.choice(
                                      ["moderately_acidic","neutral",
                                       "slightly_acidic"], n),
         "rainfall_band":             np.random.choice(
-                                     ["semi_arid","sub_humid","humid"], n),
+                                     ["dry","wet","very_wet"], n),
         "water_stress_category":     np.random.choice(
                                      ["none","mild","moderate"], n),
         "top_species_1":             np.random.choice(
@@ -120,26 +119,21 @@ def sample_seasonal_df(sample_annual_df):
             row["avg_temp_c"] = 20 + 10 * np.sin((month - 6) * np.pi / 6)
             row["avg_max_temp_c"] = row["avg_temp_c"] + 5
             row["avg_min_temp_c"] = row["avg_temp_c"] - 5
-            row["avg_monthly_precip_mm"] = np.random.uniform(0, 200)
+            row["avg_monthly_rain_mm"] = np.random.uniform(0, 200)
             row["avg_solar_radiation_mj"] = np.random.uniform(10, 25)
             row["avg_humidity_pct"] = np.random.uniform(40, 85)
-            row["avg_daily_gdd"] = max(0, row["avg_temp_c"] - 10)
-            row["avg_monthly_gdd"] = row["avg_daily_gdd"] * 30
+            row["avg_monthly_gdd"] = max(0, row["avg_temp_c"] - 10) * 30
             row["avg_frost_days_in_month"] = max(0, -row["avg_temp_c"] + 2)
             row["dry_day_fraction"] = np.random.uniform(0.2, 0.8)
-            row["temp_seasonal_ratio"] = np.random.uniform(0.7, 1.3)
-            row["precip_seasonal_ratio"] = np.random.uniform(0.3, 2.0)
-            row["solar_seasonal_ratio"] = np.random.uniform(0.6, 1.4)
-            row["ph_x_temperature"] = row["soil_ph"] * row["avg_temp_c"]
-            row["nitrogen_x_rainfall"] = row["nitrogen_g_kg"] * row["avg_monthly_precip_mm"]
-            row["clay_x_rainfall"] = row["clay_pct"] * row["avg_monthly_precip_mm"] / 100
-            row["gdd_x_solar"] = row["avg_monthly_gdd"] * row["avg_solar_radiation_mj"]
+            row["temp_vs_annual_mean_c"] = np.random.uniform(-8, 8)
+            row["rain_vs_average_month_ratio"] = np.random.uniform(0.3, 2.0)
+            row["solar_vs_average_month_ratio"] = np.random.uniform(0.6, 1.4)
             row["is_frost_free_month"] = 1 if row["avg_frost_days_in_month"] == 0 else 0
-            row["is_high_rainfall_month"] = 1 if row["avg_monthly_precip_mm"] > 100 else 0
+            row["is_high_rainfall_month"] = 1 if row["avg_monthly_rain_mm"] > 100 else 0
             row["is_good_planting_month"] = (
                 1 if (15 <= row["avg_temp_c"] <= 35
                       and row["avg_frost_days_in_month"] == 0
-                      and row["avg_monthly_precip_mm"] > 20) else 0
+                      and row["avg_monthly_rain_mm"] > 20) else 0
             )
             row["tropical_crop_viable"] = 1 if row["avg_temp_c"] >= 18 else 0
             row["cool_season_crop_viable"] = 1 if 8 <= row["avg_temp_c"] <= 20 else 0
@@ -159,35 +153,35 @@ class TestEncodeCategorials:
         """Categorical columns must be encoded to integers."""
         df_enc, encoders = encode_categoricals(
             sample_annual_df,
-            ["climate_zone", "soil_texture_class"]
+            ["frost_zone", "soil_texture_class"]
         )
-        assert df_enc["climate_zone"].dtype in [np.int32, np.int64, int]
+        assert df_enc["frost_zone"].dtype in [np.int32, np.int64, int]
         assert df_enc["soil_texture_class"].dtype in [np.int32, np.int64, int]
 
     def test_encoder_stored_for_each_column(self, sample_annual_df):
         """An encoder must be stored for every encoded column."""
         _, encoders = encode_categoricals(
             sample_annual_df,
-            ["climate_zone", "gdd_crop_class"]
+            ["frost_zone", "crop_heat_class"]
         )
-        assert "climate_zone" in encoders
-        assert "gdd_crop_class" in encoders
+        assert "frost_zone" in encoders
+        assert "crop_heat_class" in encoders
 
     def test_nulls_filled_with_unknown(self, sample_annual_df):
         """NULL values must not crash encoding — filled as 'unknown'."""
         df = sample_annual_df.copy()
-        df.loc[0, "climate_zone"] = None
-        df_enc, _ = encode_categoricals(df, ["climate_zone"])
-        assert df_enc["climate_zone"].isna().sum() == 0
+        df.loc[0, "frost_zone"] = None
+        df_enc, _ = encode_categoricals(df, ["frost_zone"])
+        assert df_enc["frost_zone"].isna().sum() == 0
 
     def test_inverse_transform_roundtrip(self, sample_annual_df):
         """Encoded values must decode back to original strings."""
-        original = sample_annual_df["climate_zone"].iloc[0]
+        original = sample_annual_df["frost_zone"].iloc[0]
         df_enc, encoders = encode_categoricals(
-            sample_annual_df, ["climate_zone"]
+            sample_annual_df, ["frost_zone"]
         )
-        encoded = df_enc["climate_zone"].iloc[0]
-        decoded = encoders["climate_zone"].inverse_transform([encoded])[0]
+        encoded = df_enc["frost_zone"].iloc[0]
+        decoded = encoders["frost_zone"].inverse_transform([encoded])[0]
         assert decoded == original
 
 
@@ -231,11 +225,11 @@ class TestPrepareSeasonalFeatures:
         X, _, _ = prepare_seasonal_features(sample_seasonal_df)
         assert X.isna().sum().sum() == 0
 
-    def test_interaction_terms_present(self, sample_seasonal_df):
-        """Interaction terms must be in the seasonal feature matrix."""
+    def test_location_context_present(self, sample_seasonal_df):
+        """Soil context must be in the seasonal matrix as plain columns."""
         X, _, feature_cols = prepare_seasonal_features(sample_seasonal_df)
-        assert "ph_x_temperature" in feature_cols
-        assert "nitrogen_x_rainfall" in feature_cols
+        assert "soil_ph" in feature_cols
+        assert "temp_vs_annual_mean_c" in feature_cols
 
 
 class TestPrepareTargets:
