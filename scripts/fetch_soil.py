@@ -2,7 +2,6 @@
 Fetches REAL, field-measured soil data from WoSIS (World Soil
 """
 
-import profile
 import sys
 import time
 import math
@@ -150,48 +149,69 @@ def query_wosis_box(lat, lon, box_deg):
         raise RuntimeError(f"WoSIS GraphQL errors: {data['errors']}")
     return data["data"]["wosisLatestProfiles"]
 
+# Soil columns we store: column name -> (WoSIS field, factor used to store it as a whole number)
+SOIL_PROPERTIES = {
+    "phh2o_0_5cm":    ("phaqValues",   10),
+    "clay_0_5cm":     ("clayValues",   10),
+    "sand_0_5cm":     ("sandValues",   10),
+    "silt_0_5cm":     ("siltValues",   10),
+    "soc_0_5cm":      ("orgcValues",   10),
+    "nitrogen_0_5cm": ("nitkjdValues", 100),
+}
+
+
+def missing_properties(profiles, lat, lon):
+    """Names of the soil properties that no profile in this list has a measurement for."""
+    return [
+        column for column, (field, _) in SOIL_PROPERTIES.items()
+        if distance_weighted_average(profiles, lat, lon, field)[1] == 0
+    ]
+
+
 # Fetch soil data for a specific city
 def fetch_soil_for_city(city_name, lat, lon):
     """
-    Returns (profiles, box_size_used)box_size_used is None if genuinely no coverage 
-    was found at any tested radius.
+    Returns a list of (box_degrees, profiles), from the smallest search box to the widest used.
+
+    The search widens when the small box has no profiles OR when some property (for example pH)
+    has no measurement in it. Widening only for "no profiles" left pH empty for cities where
+    nearby profiles existed but none had a pH reading.
     """
+    levels = []
     for box_deg in BOX_SIZES_DEG:
         profiles = query_wosis_box(lat, lon, box_deg)
         if profiles:
-            return profiles, box_deg
-        logger.info(f"  No profiles within {box_deg}deg — widening")
-    return [], None
+            levels.append((box_deg, profiles))
+            if not missing_properties(profiles, lat, lon):
+                break
+        logger.info(f"  Not enough data within {box_deg}deg - widening")
+    return levels
+
 
 # Build a row of soil data for a city
-def build_soil_row(city, country, lat, lon, profiles, box_deg_used):
-    # Computes the distance-weighted average of each soil property across all found 
-    # profiles, using only the shallowest layer of each profile. 
-    # Returns a dictionary representing a row of soil data for the city.
-    ph, n_ph     = distance_weighted_average(profiles, lat, lon, "phaqValues")
-    clay, n_clay = distance_weighted_average(profiles, lat, lon, "clayValues")
-    sand, n_sand = distance_weighted_average(profiles, lat, lon, "sandValues")
-    silt, n_silt = distance_weighted_average(profiles, lat, lon, "siltValues")
-    orgc, n_orgc = distance_weighted_average(profiles, lat, lon, "orgcValues")
-    nitkjd, n_n  = distance_weighted_average(profiles, lat, lon, "nitkjdValues")
-
-    return {
-        "city":              city,
-        "country":           country,
-        "latitude":          lat,
-        "longitude":         lon,
-        "soil_data_source":  "wosis",
-        "ingested_at":       datetime.utcnow(),
-        "phh2o_0_5cm":       round(ph * 10) if ph is not None else None,
-        "clay_0_5cm":        round(clay * 10) if clay is not None else None,
-        "sand_0_5cm":        round(sand * 10) if sand is not None else None,
-        "silt_0_5cm":        round(silt * 10) if silt is not None else None,
-        "soc_0_5cm":         round(orgc * 10) if orgc is not None else None,
-        "nitrogen_0_5cm":    round(nitkjd * 100) if nitkjd is not None else None,
-        "wosis_profiles_used":     len(profiles),
-        "wosis_box_degrees_used":  box_deg_used,
-        "wosis_ph_n_profiles":     n_ph,
+def build_soil_row(city, country, lat, lon, levels):
+    """
+    For each soil property, takes the distance-weighted average from the smallest search box
+    that has a measurement for it (shallowest layer of each profile only).
+    A property with no measurement in any box stays empty.
+    """
+    row = {
+        "city": city, "country": country, "latitude": lat, "longitude": lon,
+        "soil_data_source": "wosis", "ingested_at": datetime.utcnow(),
     }
+    n_used = {}
+    for column, (field, factor) in SOIL_PROPERTIES.items():
+        row[column], n_used[column] = None, 0
+        for _, profiles in levels:
+            value, n = distance_weighted_average(profiles, lat, lon, field)
+            if value is not None:
+                row[column], n_used[column] = round(value * factor), n
+                break
+    row["wosis_profiles_used"] = len(levels[0][1]) if levels else 0
+    row["wosis_box_degrees_used"] = levels[-1][0] if levels else None
+    row["wosis_ph_n_profiles"] = n_used["phh2o_0_5cm"]
+    return row
+
 
 # Fetch soil data for all 54 cities from WoSIS and writes to public.soil. 
 def fetch_soil():
@@ -210,24 +230,24 @@ def fetch_soil():
         logger.info(f"[{i:2d}/{len(GLOBAL_LOCATIONS)}] {city_name}")
 
         try:
-            profiles, box_used = fetch_soil_for_city(city_name, lat, lon)
+            levels = fetch_soil_for_city(city_name, lat, lon)
 
-            if not profiles:
+            if not levels:
                 logger.info(f"  No WoSIS coverage found for {city_name} — leaving NULL")
                 no_coverage.append(city_name)
-                row = build_soil_row(city_name, loc["Country"], lat, lon, [], None)
+                row = build_soil_row(city_name, loc["Country"], lat, lon, [])
                 df = pd.DataFrame([row])
                 df.to_sql("soil", engine, schema="public", if_exists="append", index=False)
                 continue
 
-            row = build_soil_row(city_name, loc["Country"], lat, lon, profiles, box_used)
+            row = build_soil_row(city_name, loc["Country"], lat, lon, levels)
             df = pd.DataFrame([row])
             df.to_sql("soil", engine, schema="public", if_exists="append", index=False)
 
             ph_display = row["phh2o_0_5cm"] / 10 if row["phh2o_0_5cm"] else "null"
             logger.info(
-                f"  Saved | pH: {ph_display} | {len(profiles)} profiles "
-                f"within {box_used}deg | source: wosis"
+                f"  Saved | pH: {ph_display} | {row['wosis_profiles_used']} profiles "
+                f"in the closest box, widest box {row['wosis_box_degrees_used']}deg | source: wosis"
             )
             succeeded += 1
 

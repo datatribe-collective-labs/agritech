@@ -352,3 +352,16 @@ class TestXGBoostTraining:
         assert abs(importance_sum - 1.0) < 0.01, (
             f"Feature importances sum to {importance_sum}, expected ~1.0"
         )
+
+class TestMartsSchema:
+
+    def test_defaults_to_local_schema(self, monkeypatch):
+        """Local docker builds keep working without any setting."""
+        from ml.utils.db import marts_schema
+        monkeypatch.delenv("PLANTING_MARTS_SCHEMA", raising=False)
+        assert marts_schema() == "public_marts"
+
+    def test_can_point_at_the_production_schema(self, monkeypatch):
+        from ml.utils.db import marts_schema
+        monkeypatch.setenv("PLANTING_MARTS_SCHEMA", "planting_intelligence_marts")
+        assert marts_schema() == "planting_intelligence_marts"
