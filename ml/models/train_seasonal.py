@@ -11,9 +11,8 @@ KEY DIFFERENCE FROM ANNUAL MODEL:
     The seasonal model uses dynamic monthly features
     (temperature, rainfall, GDD, frost) as primary signals.
 
-    Static soil features appear only as interaction terms
-    (ph_x_temperature, nitrogen_x_rainfall) so they don't
-    dominate the 648-row training set with 12× repetition.
+    Static soil features (pH, clay, nitrogen) appear once each as plain columns.
+    The tree model learns any soil-by-climate interaction itself.
 
 CROSS-VALIDATION STRATEGY:
     With 648 rows (54 cities × 12 months) we use:

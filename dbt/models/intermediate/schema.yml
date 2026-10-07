@@ -5,21 +5,21 @@ models:
     description: >
       Present-day environmental profile per city.
       Joins stg_soil + stg_weather + stg_water on city name.
-      One row per city. Adds planting_suitability_score.
+      One row per city. Adds current_conditions_score.
     columns:
       - name: city
         description: City name — primary key.
         tests:
           - not_null
           - unique
-      - name: planting_suitability_score
-        description: Composite score 0-100. Higher = better immediate planting conditions.
+      - name: current_conditions_score
+        description: 100 minus penalty points for frost, heat, water stress, low nitrogen and flood risk (range 10-100). Today's snapshot only.
         tests:
           - not_null
-      - name: water_deficit_mm
-        description: Daily water deficit in mm. Positive = irrigation needed.
+      - name: water_deficit_mm_per_day
+        description: Water deficit in mm per day. Positive = irrigation needed.
       - name: irrigation_needed
-        description: Boolean. TRUE when ET0 exceeds precipitation.
+        description: Boolean. TRUE when evapotranspiration exceeds rain.
 
   - name: int_climate_history
     description: >
@@ -31,21 +31,21 @@ models:
         tests:
           - not_null
           - unique
-      - name: climate_zone
-        description: Climate zone based on average annual frost days.
+      - name: frost_zone
+        description: Frost zone based only on average frost days per year (not heat or rainfall).
         tests:
           - not_null
           - accepted_values:
               values:
                 [
-                  "tropical",
-                  "subtropical",
-                  "temperate",
-                  "continental",
-                  "subarctic",
+                  "frost_free",
+                  "light_frost",
+                  "moderate_frost",
+                  "heavy_frost",
+                  "severe_frost",
                 ]
-      - name: gdd_crop_class
-        description: Growing degree day class for crop compatibility.
+      - name: crop_heat_class
+        description: Class of yearly heat units (growing degree days) for crop compatibility.
         tests:
           - not_null
           - accepted_values:
@@ -79,12 +79,13 @@ models:
 
   - name: int_companion_matrix
     description: >
-      Scored companion planting species pairs.
-      Joins companion_planting seed with int_species_habitat.
-      Excludes antagonistic pairs.
+      One row per curated companion pair (antagonistic pairs included, flagged
+      is_recommendable = false). Scores each pair; knows nothing about locations.
     columns:
       - name: relationship_score
-        description: Numeric score — relationship strength x evidence multiplier.
+        description: Relationship points (+3 / +1 / -5) times evidence multiplier (x3 / x2 / x1).
+        tests:
+          - not_null
       - name: benefit_category
         description: Which polyculture benefit this pair provides.
         tests:
@@ -98,5 +99,26 @@ models:
                   "ground_cover",
                   "other",
                 ]
-      - name: both_species_confirmed
-        description: TRUE when both species appear in GBIF occurrence data.
+
+  - name: int_city_species_presence
+    description: >
+      Crop species observed within species_radius_km (default 500) of each city,
+      by month. Counts show where a species was recorded, not how well it grows.
+    columns:
+      - name: city
+        tests:
+          - not_null
+      - name: observation_count
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [city, month, species]
+
+  - name: int_city_companions
+    description: >
+      Recommended companion pairs per city: both species recorded near the city
+      and the pair is not antagonistic. pair_rank 1 is the best pair.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [city, species_a, species_b]

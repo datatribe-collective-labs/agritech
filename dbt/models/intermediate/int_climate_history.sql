@@ -55,12 +55,9 @@ annual AS (
         COUNT(date)                                     AS days_with_data
 
     FROM daily
-    WHERE
-        -- Only include years with at least 300 days of data.
-        -- A year with only 50 records is incomplete and would
-        -- bias the averages. 300/365 = 82% coverage threshold.
-        city IS NOT NULL
+    WHERE city IS NOT NULL
     GROUP BY city, country, latitude, longitude, EXTRACT(YEAR FROM date)
+    -- only years with at least 300 days of data (82% coverage); thinner years would bias the averages
     HAVING COUNT(date) >= 300
 )
 
@@ -97,33 +94,32 @@ SELECT
     ROUND(AVG(frost_days_count)::NUMERIC, 0)            AS avg_frost_days_per_year,
     ROUND(AVG(dry_days_count)::NUMERIC, 0)              AS avg_dry_days_per_year,
 
-    -- Climate zone classification based on frost days.
-    -- VALIDATION NEEDED: https://en.wikipedia.org/wiki/Köppen_climate_classification#Tropical_climates
+    -- Frost zone: based ONLY on how many days per year drop to 0 C or below.
+    -- It says nothing about heat or rainfall (a hot desert is "frost_free").
     CASE
-        WHEN AVG(frost_days_count) = 0        THEN 'tropical'
-        WHEN AVG(frost_days_count) < 30       THEN 'subtropical'
-        WHEN AVG(frost_days_count) < 90       THEN 'temperate'
-        WHEN AVG(frost_days_count) < 150      THEN 'continental'
-        ELSE                                       'subarctic'
-    END                                             AS climate_zone,
+        WHEN AVG(frost_days_count) = 0   THEN 'frost_free'
+        WHEN AVG(frost_days_count) < 30  THEN 'light_frost'
+        WHEN AVG(frost_days_count) < 90  THEN 'moderate_frost'
+        WHEN AVG(frost_days_count) < 150 THEN 'heavy_frost'
+        ELSE                                  'severe_frost'
+    END                                             AS frost_zone,
 
-    -- Estimated growing season length = days above 10°C base temp.
-    -- Crops need GDDs accumulated over a frost-free window.
-    ROUND(365 - AVG(frost_days_count)::NUMERIC, 0)  AS est_growing_season_days,
+    -- Days per year without frost (365 minus average frost days)
+    ROUND(365 - AVG(frost_days_count)::NUMERIC, 0)  AS frost_free_days_per_year,
 
-    -- ── Growing degree days ───────────────────────────────────
+    -- Growing degree days: heat units above 10 C, summed over the year
     ROUND(AVG(annual_gdd)::NUMERIC, 0)              AS avg_annual_gdd,
 
-    -- GDD classification for crop type matching:
-    -- < 1000  = cool-season crops only (wheat, oats, peas)
-    -- 1000-2000 = broad range including maize, beans
-    -- > 2000  = tropical crops viable (rice, cassava, cotton)
-    -- VALIDATION NEEDED: https://www.dpird.wa.gov.au/
-    CASE    
+    -- Crop heat class from yearly growing degree days (heat units above 10 C):
+    --   under 1000: cool-season crops only (wheat, oats, peas)
+    --   1000-2000: broad range including maize and beans
+    --   over 2000: tropical crops viable (rice, cassava)
+    -- Rule of thumb; needs validation by an agronomist.
+    CASE
         WHEN AVG(annual_gdd) < 1000   THEN 'cool_season_only'
         WHEN AVG(annual_gdd) < 2000   THEN 'mixed_season'
         ELSE                               'tropical_viable'
-    END                                             AS gdd_crop_class,
+    END                                             AS crop_heat_class,
 
     -- ── Solar radiation ───────────────────────────────────────
     ROUND(AVG(avg_solar_mj)::NUMERIC, 2)            AS avg_solar_radiation_mj,
