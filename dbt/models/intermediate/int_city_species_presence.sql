@@ -10,31 +10,4 @@
 
 {{ config(materialized='view') }}
 
-WITH cities AS (
-    SELECT city, latitude, longitude FROM {{ ref('int_location_profile') }}
-),
-
-crops AS (
-    SELECT
-        p.species,
-        p.family,
-        p.month,
-        p.latitude,
-        p.longitude
-    FROM {{ ref('stg_plants') }} p
-    JOIN {{ ref('dim_plant_traits') }} t
-        ON LOWER(TRIM(p.species)) = LOWER(TRIM(t.species))
-    WHERE p.month IS NOT NULL
-)
-
-SELECT
-    c.city,
-    o.month,
-    o.species,
-    MAX(o.family) AS family,
-    COUNT(*)      AS observation_count
-FROM cities c
-JOIN crops o
-    ON {{ distance_km('c.latitude', 'c.longitude', 'o.latitude', 'o.longitude') }}
-       <= {{ var('species_radius_km') }}
-GROUP BY c.city, o.month, o.species
+{{ city_species_presence(var('species_radius_km')) }}

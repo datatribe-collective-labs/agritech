@@ -5,7 +5,8 @@
 -- and every species in dim_plant_traits.
 --
 -- LABEL  observed_nearby = 1 when the species was recorded by GBIF within
---        `species_radius_km` of the city (see int_city_species_presence), else 0.
+--        `suitability_radius_km` (default 100 km, set in dbt_project.yml) of the city, else 0.
+--        Cities with no recorded crop inside that circle are left out: they have no labels to learn from.
 --        This is where people recorded the crop, not a measurement of how well it
 --        grows. A 0 can also mean "nobody recorded it", so treat the label as a
 --        proxy for suitability.
@@ -22,7 +23,11 @@
 
 {{ config(materialized='table') }}
 
-WITH cities AS (
+WITH presence AS (
+    {{ city_species_presence(var('suitability_radius_km')) }}
+),
+
+cities AS (
     SELECT
         city, country, latitude, longitude,
         soil_ph, clay_pct, nitrogen_g_kg,
@@ -31,7 +36,7 @@ WITH cities AS (
     FROM {{ ref('mart_ml_annual_features') }}
     WHERE soil_ph IS NOT NULL
       AND frost_zone IS NOT NULL
-      AND city IN (SELECT DISTINCT city FROM {{ ref('int_city_species_presence') }})
+      AND city IN (SELECT DISTINCT city FROM presence)
 ),
 
 crops AS (
@@ -80,7 +85,7 @@ monthly_fit AS (
 
 observations AS (
     SELECT city, species, SUM(observation_count) AS observation_count
-    FROM {{ ref('int_city_species_presence') }}
+    FROM presence
     GROUP BY city, species
 ),
 
