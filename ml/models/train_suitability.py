@@ -35,10 +35,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score, roc_auc_score
+import xgboost as xgb
 from xgboost import XGBClassifier
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from ml.explainability.explain_suitability import build_explanations, contributions_to_frame  # noqa: E402
 from ml.utils.db import load_suitability_features, save_predictions  # noqa: E402
 
 MODEL_DIR = Path(__file__).parent.parent / "saved_models"
@@ -101,9 +103,11 @@ def _features_as_numbers(df: pd.DataFrame) -> pd.DataFrame:
     return df[FEATURES].apply(pd.to_numeric, errors="coerce").astype(float)
 
 
-def leave_one_city_out_scores(df: pd.DataFrame) -> pd.DataFrame:
+def leave_one_city_out_scores(df: pd.DataFrame, with_contributions: bool = False):
     """
     Scores every row with a model that never saw that row's city.
+    With with_contributions=True it also returns, for every row, how much each feature pushed
+    that row's score up or down (from the same model that produced the score).
 
     Returns the input columns city, species and the label, plus:
       model_score    probability from the model
@@ -118,6 +122,7 @@ def leave_one_city_out_scores(df: pd.DataFrame) -> pd.DataFrame:
     out["model_score"] = np.nan
     out["popularity"] = np.nan
     out["trait_fit"] = np.nan
+    contributions = pd.DataFrame(np.nan, index=df.index, columns=FEATURES)
 
     for held_out in sorted(df["city"].unique()):
         test = (df["city"] == held_out).to_numpy()
@@ -126,6 +131,9 @@ def leave_one_city_out_scores(df: pd.DataFrame) -> pd.DataFrame:
         model = XGBClassifier(**XGBOOST_PARAMS)
         model.fit(X[train], y[train])
         out.loc[test, "model_score"] = model.predict_proba(X[test])[:, 1]
+        if with_contributions:
+            raw = model.get_booster().predict(xgb.DMatrix(X[test]), pred_contribs=True)
+            contributions.loc[test, FEATURES] = contributions_to_frame(raw, FEATURES, X[test].index).to_numpy()
 
         species_rate = y[train].groupby(df.loc[train, "species"]).mean()
         out.loc[test, "popularity"] = (
@@ -135,7 +143,7 @@ def leave_one_city_out_scores(df: pd.DataFrame) -> pd.DataFrame:
         fit = X["trait_fit_share"]
         out.loc[test, "trait_fit"] = fit[test].fillna(fit[train].mean()).to_numpy()
 
-    return out
+    return (out, contributions) if with_contributions else out
 
 
 def top_n_hit_rate(scored: pd.DataFrame, score_column: str, n: int = TOP_N) -> float:
@@ -240,7 +248,7 @@ def main(dry_run: bool = False):
           f"{df['species'].nunique()} species, "
           f"{df[LABEL].mean():.1%} of pairs recorded")
 
-    scored = leave_one_city_out_scores(df)
+    scored, contributions = leave_one_city_out_scores(df, with_contributions=True)
     results = evaluate(scored)
     results["verdict"] = verdict(results)
     results["trained_at"] = datetime.now().isoformat(timespec="seconds")
@@ -272,6 +280,10 @@ def main(dry_run: bool = False):
     )
     save_predictions(predictions, "ml_species_city_suitability")
     print(f"[suitability] saved {len(predictions)} scores to ml_species_city_suitability")
+
+    explanations = build_explanations(df, contributions, top_k=3)
+    save_predictions(explanations, "ml_species_city_explanations")
+    print(f"[suitability] saved {len(explanations)} reasons to ml_species_city_explanations")
 
 
 if __name__ == "__main__":
