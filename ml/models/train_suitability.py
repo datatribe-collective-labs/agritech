@@ -25,6 +25,7 @@ RUN
   python -m ml.models.train_suitability
 """
 
+import argparse
 import json
 import pickle
 import sys
@@ -149,8 +150,48 @@ def top_n_hit_rate(scored: pd.DataFrame, score_column: str, n: int = TOP_N) -> f
     return float(np.mean(rates))
 
 
+def mean_within_city_auc(scored: pd.DataFrame, score_column: str) -> float:
+    """
+    How well the scores order the crops inside each city (0.5 = no better than guessing),
+    averaged over the cities that have both recorded and unrecorded crops.
+    This is the ranking a farmer would actually see.
+    """
+    aucs = [
+        roc_auc_score(g[LABEL], g[score_column])
+        for _, g in scored.groupby("city")
+        if g[LABEL].nunique() == 2
+    ]
+    return float(np.mean(aucs))
+
+
+def bootstrap_gain(scored: pd.DataFrame, model_column: str, baseline_column: str,
+                   n_resamples: int = 500, seed: int = 42) -> tuple:
+    """
+    95% range for (model AUC minus baseline AUC) when the cities are resampled with
+    replacement. If the range includes zero, a different set of cities could have
+    made the model look no better than the baseline.
+    """
+    scored = scored.reset_index(drop=True)
+    rng = np.random.default_rng(seed)
+    city_rows = [g.index.to_numpy() for _, g in scored.groupby("city")]
+    y = scored[LABEL].to_numpy()
+    model = scored[model_column].to_numpy()
+    baseline = scored[baseline_column].to_numpy()
+
+    differences = []
+    for _ in range(n_resamples):
+        picked = rng.integers(0, len(city_rows), len(city_rows))
+        rows = np.concatenate([city_rows[i] for i in picked])
+        if y[rows].min() == y[rows].max():
+            continue
+        differences.append(roc_auc_score(y[rows], model[rows]) - roc_auc_score(y[rows], baseline[rows]))
+    low, high = np.percentile(differences, [2.5, 97.5])
+    return float(low), float(high)
+
+
 def evaluate(scored: pd.DataFrame) -> dict:
     """Pooled out-of-sample scores for the model and both baselines."""
+    scored = scored.reset_index(drop=True)
     results = {
         "rows": int(len(scored)),
         "cities": int(scored["city"].nunique()),
@@ -158,34 +199,42 @@ def evaluate(scored: pd.DataFrame) -> dict:
         "top_n": TOP_N,
         "random_top_n_hit_rate": round(float(scored[LABEL].mean()), 3),
     }
-    for name, column in [("model", "model_score"),
-                         ("popularity_baseline", "popularity"),
-                         ("trait_fit_baseline", "trait_fit")]:
+    columns = {"model": "model_score",
+               "popularity_baseline": "popularity",
+               "trait_fit_baseline": "trait_fit"}
+    for name, column in columns.items():
         results[name] = {
             "roc_auc": round(float(roc_auc_score(scored[LABEL], scored[column])), 3),
             "average_precision": round(float(average_precision_score(scored[LABEL], scored[column])), 3),
             "top_n_hit_rate": round(top_n_hit_rate(scored, column), 3),
+            "mean_within_city_auc": round(mean_within_city_auc(scored, column), 3),
         }
-    best_baseline_auc = max(results["popularity_baseline"]["roc_auc"],
-                            results["trait_fit_baseline"]["roc_auc"])
-    results["model_beats_best_baseline_by_auc"] = round(results["model"]["roc_auc"] - best_baseline_auc, 3)
+
+    best = max(("popularity_baseline", "trait_fit_baseline"),
+               key=lambda name: results[name]["roc_auc"])
+    results["best_baseline"] = best
+    results["model_beats_best_baseline_by_auc"] = round(
+        results["model"]["roc_auc"] - results[best]["roc_auc"], 3)
+    low, high = bootstrap_gain(scored, "model_score", columns[best])
+    results["gain_95_percent_range"] = [round(low, 3), round(high, 3)]
     return results
 
 
 def verdict(results: dict) -> str:
     """One plain sentence on whether the model earns its place."""
     gain = results["model_beats_best_baseline_by_auc"]
-    if gain >= 0.03:
+    low, high = results["gain_95_percent_range"]
+    if low > 0:
         return (f"The model beats the best simple baseline by {gain:.3f} AUC "
-                f"on cities it has never seen.")
+                f"(95% range {low:.3f} to {high:.3f}), and the gain holds when cities are resampled.")
     if gain > 0:
-        return (f"The model is only {gain:.3f} AUC better than the best simple baseline: "
-                f"too small to justify the extra complexity yet.")
+        return (f"The model is {gain:.3f} AUC ahead of the best simple baseline, but the 95% range "
+                f"({low:.3f} to {high:.3f}) includes zero: with this few cities the gain could be chance.")
     return ("The model does not beat the best simple baseline on cities it has never seen. "
             "Use the baseline until there is more data.")
 
 
-def main():
+def main(dry_run: bool = False):
     df = load_suitability_features()
     print(f"[suitability] {len(df)} rows, {df['city'].nunique()} cities, "
           f"{df['species'].nunique()} species, "
@@ -197,6 +246,10 @@ def main():
     results["trained_at"] = datetime.now().isoformat(timespec="seconds")
 
     print(json.dumps(results, indent=2))
+
+    if dry_run:
+        print("[suitability] dry run: nothing saved")
+        return
 
     # Final model on all cities, for scoring cities that are not in the data yet.
     final_model = XGBClassifier(**XGBOOST_PARAMS)
@@ -222,4 +275,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Train and test the species-by-city suitability model.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print the test results only; do not save the model, report or scores")
+    main(dry_run=parser.parse_args().dry_run)

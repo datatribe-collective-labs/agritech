@@ -123,10 +123,54 @@ def test_top_n_hit_rate_by_hand():
     assert ts.top_n_hit_rate(scored, "score", n=2) == pytest.approx(0.75)
 
 
-@pytest.mark.parametrize("gain, phrase", [
-    (0.10, "beats the best simple baseline by"),
-    (0.01, "too small"),
-    (-0.02, "does not beat"),
+@pytest.mark.parametrize("gain, low, high, phrase", [
+    (0.10, 0.04, 0.16, "holds when cities are resampled"),
+    (0.04, -0.02, 0.10, "could be chance"),
+    (-0.02, -0.08, 0.03, "does not beat"),
 ])
-def test_verdict_is_honest(gain, phrase):
-    assert phrase in ts.verdict({"model_beats_best_baseline_by_auc": gain})
+def test_verdict_is_honest(gain, low, high, phrase):
+    results = {"model_beats_best_baseline_by_auc": gain, "gain_95_percent_range": [low, high]}
+    assert phrase in ts.verdict(results)
+
+
+def scores_frame(model_scores, baseline_scores, labels, cities):
+    return pd.DataFrame({"city": cities, ts.LABEL: labels,
+                         "model_score": model_scores, "baseline": baseline_scores})
+
+
+def test_bootstrap_range_is_clearly_positive_for_a_much_better_model():
+    rng = np.random.default_rng(1)
+    cities = [f"c{i}" for i in range(20) for _ in range(10)]
+    labels = np.tile([1, 0] * 5, 20)
+    scored = scores_frame(labels + rng.normal(0, 0.1, 200), rng.random(200), labels, cities)
+    low, high = ts.bootstrap_gain(scored, "model_score", "baseline", n_resamples=200)
+    assert 0 < low <= high
+
+
+def test_bootstrap_range_is_zero_when_model_equals_baseline():
+    rng = np.random.default_rng(2)
+    cities = [f"c{i}" for i in range(10) for _ in range(10)]
+    labels = rng.integers(0, 2, 100)
+    same = rng.random(100)
+    low, high = ts.bootstrap_gain(scores_frame(same, same, labels, cities),
+                                  "model_score", "baseline", n_resamples=50)
+    assert (low, high) == (0.0, 0.0)
+
+
+def test_within_city_auc_by_hand():
+    # city a is ranked perfectly (AUC 1); city b is ranked backwards (AUC 0); city c has one class and is skipped
+    scored = pd.DataFrame({
+        "city": ["a"] * 4 + ["b"] * 4 + ["c"] * 2,
+        ts.LABEL: [1, 1, 0, 0, 1, 1, 0, 0, 0, 0],
+        "score": [0.9, 0.8, 0.2, 0.1, 0.1, 0.2, 0.8, 0.9, 0.5, 0.4],
+    })
+    assert ts.mean_within_city_auc(scored, "score") == pytest.approx(0.5)
+
+
+def test_evaluate_reports_best_baseline_and_range():
+    scored = ts.leave_one_city_out_scores(make_frame(n_cities=12, n_species=6, signal=True))
+    results = ts.evaluate(scored)
+    assert results["best_baseline"] in ("popularity_baseline", "trait_fit_baseline")
+    low, high = results["gain_95_percent_range"]
+    assert low <= high
+    assert set(results["model"]) >= {"roc_auc", "top_n_hit_rate", "mean_within_city_auc"}
