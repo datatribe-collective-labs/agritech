@@ -29,6 +29,9 @@ clean-targets: ["target", "dbt_packages"]
 vars:
   # A species counts as "near" a city if it was observed within this many km.
   species_radius_km: 500
+  # The species-by-city suitability table uses a tighter circle, so a recorded crop is
+  # more likely to reflect that city's own conditions (500 km spans several climates).
+  suitability_radius_km: 100
 
 # - MODEL CONFIGURATIONS
 # Defines how each layer materialises in Postgres.

@@ -111,7 +111,8 @@ models:
   - name: mart_species_city_suitability
     description: >
       ML Feature Table C. One row per crop species and city: "does this crop suit this city?"
-      Covers every city with usable soil pH and frost data, and every species in dim_plant_traits.
+      Covers every city with usable soil pH and frost data and at least one recorded crop within
+      suitability_radius_km (default 100 km), and every species in dim_plant_traits.
       The label observed_nearby says whether the crop was recorded near the city; it is a proxy
       for suitability, not a measurement of how well the crop grows.
       The fit-check columns compare what the crop needs with what the city offers, using plain
@@ -131,7 +132,7 @@ models:
         tests:
           - not_null
       - name: observed_nearby
-        description: 1 if the crop was recorded within the search radius of the city, otherwise 0. This is the ML label.
+        description: 1 if the crop was recorded within suitability_radius_km (default 100 km) of the city, otherwise 0. This is the ML label.
         tests:
           - not_null
           - accepted_values:
