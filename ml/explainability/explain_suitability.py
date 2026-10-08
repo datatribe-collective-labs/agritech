@@ -7,6 +7,11 @@ HOW IT WORKS
   pushed the score up; a negative one pulled it down. The contributions and a base level
   add up to the model's score (in log-odds, the scale the model works on internally).
 
+  Reasons are measured against the city's average crop. City-wide facts such as rainfall
+  lift or lower every crop in the city equally, so they say nothing about why one crop
+  ranks above another. Subtracting the city's average removes them and leaves what is
+  different about THIS crop in THIS city.
+
   train_suitability.py takes the contributions from the same leave-one-city-out model that
   produced each score, so the reasons never come from a model that saw that city.
 
@@ -19,7 +24,7 @@ HOW TO READ IT
 import numpy as np
 import pandas as pd
 
-MIN_EFFECT = 1e-6  # contributions smaller than this are treated as "no effect"
+MIN_EFFECT = 0.01  # contributions (log-odds) smaller than this are treated as "no effect"
 
 # Plain wording for each feature the suitability model uses.
 FEATURE_LABELS = {
@@ -64,12 +69,16 @@ def build_explanations(rows: pd.DataFrame, contributions: pd.DataFrame, top_k: i
     rows           the species-city table, one row per score (needs city, species and the features)
     contributions  same length and order as rows, one column per feature (log-odds)
 
+    Each contribution is first measured against the average crop in the same city.
+
     A score gets fewer than top_k reasons if fewer features had any effect on it.
     Returns one row per score and reason, strongest first: city, species, reason_rank,
-    feature, feature_label, feature_value, effect ('raises' or 'lowers'), contribution, reason.
+    feature, feature_label, feature_value, effect ('raises' or 'lowers'),
+    contribution (against the city's average crop), reason.
     """
     rows = rows.reset_index(drop=True)
     contributions = contributions.reset_index(drop=True)
+    contributions = contributions - contributions.groupby(rows["city"]).transform("mean")
 
     records = []
     for i in range(len(rows)):
@@ -88,7 +97,8 @@ def build_explanations(rows: pd.DataFrame, contributions: pd.DataFrame, top_k: i
                 "feature_value": None if pd.isna(value) else float(value),
                 "effect": effect,
                 "contribution": round(float(contributions.at[i, feature]), 4),
-                "reason": f"{label}: {_format_value(value)} {effect} the score",
+                "reason": (f"{label}: {_format_value(value)} {effect} its score "
+                           f"compared with other crops in {rows.at[i, 'city']}"),
             })
     return pd.DataFrame.from_records(records)
 

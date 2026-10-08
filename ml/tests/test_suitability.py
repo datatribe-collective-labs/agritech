@@ -210,19 +210,28 @@ def test_explanations_come_with_each_score_and_name_the_informative_features():
 
 
 def test_explanation_wording_by_hand():
-    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"],
-                         "soil_ph": [5.5], "frost_free_months": [5.0], "ph_gap": [np.nan]})
-    contributions = pd.DataFrame({"soil_ph": [-0.2], "frost_free_months": [-1.5], "ph_gap": [0.6]})
-    reasons = ex.build_explanations(rows, contributions, top_k=2)
-
-    assert list(reasons["feature"]) == ["frost_free_months", "ph_gap"]          # strongest first
-    assert reasons.loc[0, "reason"] == "Frost-free months: 5 lowers the score"
-    assert reasons.loc[1, "reason"] == "Soil pH distance outside the crop's ideal range: unknown raises the score"
-    assert pd.isna(reasons.loc[1, "feature_value"])
-
-
-def test_features_with_no_effect_are_not_reasons():
-    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"], "soil_ph": [5.5], "clay_pct": [20.0]})
-    contributions = pd.DataFrame({"soil_ph": [0.0], "clay_pct": [0.4]})
+    rows = pd.DataFrame({"city": ["Oulu", "Oulu"], "species": ["Zea mays", "Avena"],
+                         "soil_ph": [5.5, 5.5], "frost_free_months": [5.0, 12.0],
+                         "ph_gap": [np.nan, 0.0]})
+    contributions = pd.DataFrame({"soil_ph": [0.5, 0.5],             # same for both crops: a city-wide effect
+                                  "frost_free_months": [-1.0, 1.0],
+                                  "ph_gap": [0.4, 0.0]})
     reasons = ex.build_explanations(rows, contributions, top_k=3)
-    assert list(reasons["feature"]) == ["clay_pct"]
+    maize = reasons[reasons["species"] == "Zea mays"].reset_index(drop=True)
+
+    assert list(maize["feature"]) == ["frost_free_months", "ph_gap"]    # strongest first; soil_ph drops out
+    assert maize.loc[0, "reason"] == "Frost-free months: 5 lowers its score compared with other crops in Oulu"
+    assert maize.loc[1, "reason"] == ("Soil pH distance outside the crop's ideal range: unknown raises its score "
+                                      "compared with other crops in Oulu")
+    assert pd.isna(maize.loc[1, "feature_value"])
+
+
+def test_city_wide_effects_are_not_reasons():
+    # soil_ph pushes both crops up equally, so it explains the city, not the difference between crops
+    rows = pd.DataFrame({"city": ["Oulu", "Oulu"], "species": ["a", "b"],
+                         "soil_ph": [5.5, 5.5], "clay_pct": [20.0, 20.0]})
+    contributions = pd.DataFrame({"soil_ph": [0.9, 0.9], "clay_pct": [0.4, -0.4]})
+    reasons = ex.build_explanations(rows, contributions, top_k=3)
+    assert set(reasons["feature"]) == {"clay_pct"}
+    assert list(reasons.loc[reasons["species"] == "a", "effect"]) == ["raises"]
+    assert list(reasons.loc[reasons["species"] == "b", "effect"]) == ["lowers"]
