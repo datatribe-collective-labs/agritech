@@ -174,3 +174,55 @@ def test_evaluate_reports_best_baseline_and_range():
     low, high = results["gain_95_percent_range"]
     assert low <= high
     assert set(results["model"]) >= {"roc_auc", "top_n_hit_rate", "mean_within_city_auc"}
+
+
+# EXPLANATIONS
+
+from ml.explainability import explain_suitability as ex  # noqa: E402
+
+
+def test_every_feature_has_plain_wording():
+    assert [f for f in ts.FEATURES if f not in ex.FEATURE_LABELS] == []
+
+
+def test_contributions_add_up_to_the_models_score():
+    import xgboost as xgb
+    df = make_frame(n_cities=10, n_species=6)
+    X = ts._features_as_numbers(df)
+    model = ts.XGBClassifier(**ts.XGBOOST_PARAMS).fit(X, df[ts.LABEL])
+    raw = model.get_booster().predict(xgb.DMatrix(X), pred_contribs=True)
+    probability = model.predict_proba(X)[:, 1]
+    log_odds = np.log(probability / (1 - probability))
+    assert raw.sum(axis=1) == pytest.approx(log_odds, abs=1e-3)
+
+
+def test_explanations_come_with_each_score_and_name_the_informative_features():
+    df = make_frame(n_cities=12, n_species=6, signal=True)
+    scored, contributions = ts.leave_one_city_out_scores(df, with_contributions=True)
+    assert contributions.shape == (len(df), len(ts.FEATURES))
+    assert contributions.notna().all().all()
+
+    reasons = ex.build_explanations(df, contributions, top_k=3)
+    assert len(reasons) == 3 * len(df)
+    first = reasons[reasons["reason_rank"] == 1]
+    informative = {"months_in_optimal_temp", "trait_fit_share", "ph_gap"}
+    assert first["feature"].isin(informative).mean() > 0.9
+
+
+def test_explanation_wording_by_hand():
+    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"],
+                         "soil_ph": [5.5], "frost_free_months": [5.0], "ph_gap": [np.nan]})
+    contributions = pd.DataFrame({"soil_ph": [-0.2], "frost_free_months": [-1.5], "ph_gap": [0.6]})
+    reasons = ex.build_explanations(rows, contributions, top_k=2)
+
+    assert list(reasons["feature"]) == ["frost_free_months", "ph_gap"]          # strongest first
+    assert reasons.loc[0, "reason"] == "Frost-free months: 5 lowers the score"
+    assert reasons.loc[1, "reason"] == "Soil pH distance outside the crop's ideal range: unknown raises the score"
+    assert pd.isna(reasons.loc[1, "feature_value"])
+
+
+def test_features_with_no_effect_are_not_reasons():
+    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"], "soil_ph": [5.5], "clay_pct": [20.0]})
+    contributions = pd.DataFrame({"soil_ph": [0.0], "clay_pct": [0.4]})
+    reasons = ex.build_explanations(rows, contributions, top_k=3)
+    assert list(reasons["feature"]) == ["clay_pct"]
