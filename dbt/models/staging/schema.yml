@@ -17,12 +17,12 @@ sources:
           - name: ingested_at
             description: Timestamp when the Airflow pipeline wrote this row
       - name: soil
-        description: Soil composition at 0-5cm depth from ISRIC SoilGrids.
+        description: Soil at 0-5cm depth, averaged from nearby ISRIC WoSIS field-measured profiles (about 55-220 km).
         columns:
           - name: city
             description: City name — join key across all tables
           - name: phh2o_0_5cm
-            description: Soil pH multiplied by 10 (stored as integer by SoilGrids)
+            description: Soil pH multiplied by 10 (stored as an integer by the fetch script). Empty when no nearby profile has a pH measurement.
       - name: weather
         description: Current weather snapshot from OpenWeatherMap.
         columns:
@@ -107,8 +107,8 @@ models:
 
   - name: stg_weather
     description: >
-      Latest weather snapshot per city. Adds heat_stress, frost_risk,
-      growing_conditions flags. One row per city.
+      Latest weather snapshot per city. Adds heat_stress, frost_risk
+      flags and a temperature_band. One row per city.
     columns:
       - name: city
         description: City name — join key.
@@ -119,15 +119,16 @@ models:
         description: Current air temperature in Celsius.
       - name: humidity_pct
         description: Relative humidity percentage 0-100.
-      - name: growing_conditions
-        description: Categorical temperature classification.
+      - name: temperature_band
+        description: Today's temperature as cold / cool / optimal / warm / hot (rule of thumb).
         tests:
           - not_null
 
   - name: stg_water
     description: >
-      7-day water balance per city. Adds water_deficit_mm,
-      irrigation_needed, water_stress_category, aridity_index.
+      Water balance for the forecast window (about 7 days) per city. Adds
+      water_deficit_mm_per_day, irrigation_needed, water_stress_category and
+      forecast_rain_to_evap_ratio.
       One row per city.
     columns:
       - name: city
@@ -135,8 +136,8 @@ models:
         tests:
           - not_null
           - unique
-      - name: water_deficit_mm
-        description: ET0 minus precipitation in mm/day. Positive = irrigation needed.
+      - name: water_deficit_mm_per_day
+        description: Evapotranspiration minus rain, in mm per day. Positive = irrigation needed.
       - name: water_stress_category
         description: Severity of water deficit.
         tests:

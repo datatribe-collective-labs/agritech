@@ -23,20 +23,9 @@ SELECT
     cloud_cover_pct,
     weather_main,
     description,
-    growing_conditions,
+    temperature_band,
     heat_stress,
     frost_risk,
-
-    -- Temperature band for analyst filtering
-    CASE
-        WHEN temperature_c IS NULL   THEN 'unknown'
-        WHEN temperature_c < 0       THEN 'freezing'
-        WHEN temperature_c < 10      THEN 'cold'
-        WHEN temperature_c < 18      THEN 'cool'
-        WHEN temperature_c < 26      THEN 'optimal'
-        WHEN temperature_c < 35      THEN 'warm'
-        ELSE                              'hot'
-    END                              AS temp_band,
 
     -- Humidity comfort class
     CASE

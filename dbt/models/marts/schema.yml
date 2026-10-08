@@ -27,15 +27,19 @@ models:
         tests:
           - not_null
       - name: soil_ph
-        description: Soil pH 0-14. NULL if SoilGrids returned invalid data.
-      - name: planting_suitability_score
-        description: Composite score 0-100. Higher = better immediate conditions.
+        description: Soil pH 0-14. Empty when no nearby WoSIS profile has a pH measurement (never guessed).
+      - name: current_conditions_score
+        description: 100 minus penalty points for today's frost, heat, water stress, low nitrogen and flood risk (10-100). Same in all 12 months of a city.
         tests:
           - not_null
       - name: irrigation_needed
-        description: TRUE when current ET0 exceeds precipitation.
-      - name: water_deficit_mm
-        description: Current daily water deficit in mm.
+        description: TRUE when evapotranspiration exceeds rain over the forecast window.
+      - name: water_deficit_mm_per_day
+        description: Water deficit in mm per day over the forecast window.
+      - name: frost_zone
+        description: Frost zone from average frost days per year.
+      - name: companion_species_a
+        description: Best companion pair for the city. Differs between cities because both species must be recorded near the city.
       - name: nitrogen_deficient
         description: TRUE when nitrogen < 1.0 g/kg.
       - name: mart_built_at
@@ -58,7 +62,7 @@ models:
           - not_null
           - unique
       - name: is_ml_ready
-        description: TRUE when soil_ph, climate_zone, and top_species_1 are all present.
+        description: TRUE when soil_ph, frost_zone and top_species_1 are all present.
         tests:
           - not_null
       - name: soil_feature_completeness
@@ -96,7 +100,7 @@ models:
         tests:
           - not_null
       - name: is_ml_ready
-        description: TRUE when top_species_1, avg_temp_c, avg_monthly_precip_mm, and climate_zone present.
+        description: TRUE when top_species_1, avg_temp_c, avg_monthly_rain_mm and frost_zone are present.
         tests:
           - not_null
       - name: monthly_feature_completeness

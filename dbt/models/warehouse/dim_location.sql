@@ -50,27 +50,15 @@ SELECT
         ELSE 'Other'
     END                                     AS world_region,
 
-    -- Climate classification
-    climate.climate_zone,
-    climate.gdd_crop_class,
+    -- Long-term climate (10-year NASA averages)
+    climate.frost_zone,
+    climate.crop_heat_class,
     climate.avg_annual_precip_mm,
+    {{ rainfall_band('climate.avg_annual_precip_mm') }} AS rainfall_band,
     climate.avg_frost_days_per_year,
-    climate.est_growing_season_days,
+    climate.frost_free_days_per_year,
     climate.avg_solar_radiation_mj,
 
-    -- Aridity classification for the location
-    -- VALIDATION REQUIRED
-    CASE
-        WHEN climate.avg_annual_precip_mm IS NULL   THEN 'unknown'
-        WHEN climate.avg_annual_precip_mm < 250     THEN 'hyper_arid'
-        WHEN climate.avg_annual_precip_mm < 500     THEN 'arid'
-        WHEN climate.avg_annual_precip_mm < 750     THEN 'semi_arid'
-        WHEN climate.avg_annual_precip_mm < 1200    THEN 'sub_humid'
-        ELSE                                             'humid'
-    END                                     AS aridity_class,
-
-    -- Elevation band (from soil data which carries coordinates)
-    -- Used for crop altitude suitability filtering
     location.last_updated_at
 
 FROM location

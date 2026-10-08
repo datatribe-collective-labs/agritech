@@ -8,6 +8,15 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 
+def marts_schema() -> str:
+    """
+    Schema that holds the mart tables. Local docker builds use `public_marts`;
+    the production dbt target writes to `planting_intelligence_marts`.
+    Set PLANTING_MARTS_SCHEMA to override.
+    """
+    return os.environ.get("PLANTING_MARTS_SCHEMA", "public_marts")
+
+
 def get_engine():
     """
     Returns a SQLAlchemy engine pointed at the database.
@@ -24,9 +33,9 @@ def load_annual_features() -> pd.DataFrame:
     Loads mart_ml_annual_features from Postgres.
     """
     engine = get_engine()
-    query = text("""
+    query = text(f"""
         SELECT *
-        FROM public_marts.mart_ml_annual_features
+        FROM {marts_schema()}.mart_ml_annual_features
         ORDER BY city
     """)
     with engine.connect() as conn:
@@ -42,9 +51,9 @@ def load_seasonal_features() -> pd.DataFrame:
     Only returns rows with monthly_feature_completeness >= 3, since we need at least 3 months of data to train a seasonal model.
     """
     engine = get_engine()
-    query = text("""
+    query = text(f"""
         SELECT *
-        FROM public_marts.mart_ml_seasonal_features
+        FROM {marts_schema()}.mart_ml_seasonal_features
         WHERE monthly_feature_completeness >= 3
         ORDER BY city, month
     """)
@@ -67,7 +76,7 @@ def save_predictions(predictions_df: pd.DataFrame, table_name: str):
     predictions_df.to_sql(
         table_name,
         engine,
-        schema="public_marts",
+        schema=marts_schema(),
         if_exists="replace",
         index=False
     )
