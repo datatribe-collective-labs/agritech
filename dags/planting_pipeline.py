@@ -82,7 +82,8 @@ with DAG(
     task_soil = PythonOperator(
         task_id="fetch_soil",
         python_callable=run_fetch_soil,
-        execution_timeout=timedelta(minutes=30),
+        # The tile search takes ~35 minutes for 55 cities; 30 minutes would cut the last cities off.
+        execution_timeout=timedelta(minutes=90),
     )
 
     task_weather = PythonOperator(

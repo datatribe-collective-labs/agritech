@@ -25,6 +25,11 @@ snapshot-paths: ["snapshots"] # slowly changing dimension snapshots
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+# - Settings that can be changed without editing SQL
+vars:
+  # A species counts as "near" a city if it was observed within this many km.
+  species_radius_km: 500
+
 # - MODEL CONFIGURATIONS
 # Defines how each layer materialises in Postgres.
 

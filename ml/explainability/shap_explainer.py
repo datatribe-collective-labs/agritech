@@ -348,7 +348,7 @@ class PlantingExplainer:
                     "before or alongside this crop."
                 )
             elif feat == "irrigation_needed_flag" and val == 1:
-                deficit = data_row.get("current_water_deficit_mm", "unknown")
+                deficit = data_row.get("water_deficit_mm_per_day", "unknown")
                 advice.append(
                     f"Water deficit of {deficit}mm/day detected — irrigation is "
                     "recommended. Consider drip irrigation to minimise water loss, "

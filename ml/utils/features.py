@@ -29,19 +29,16 @@ ANNUAL_NUMERIC_FEATURES = [
     # Long-term climate
     "avg_annual_precip_mm",
     "avg_frost_days_per_year",
-    "est_growing_season_days",
+    "frost_free_days_per_year",
     "avg_annual_gdd",
     "temp_variability_c",
-    "climate_zone_ordinal",   
+    "frost_zone_ordinal",
 
-    # Water balance
-    "aridity_index",
-    "current_water_deficit_mm",
-    "irrigation_needed_flag",  
-
-    # Companion context
-    "needs_legume_companion",
-    "needs_drought_tolerant_companion",
+    # Water balance (this week's forecast)
+    "forecast_rain_to_evap_ratio",
+    "water_deficit_mm_per_day",
+    "irrigation_needed_flag",
+    "water_stress_flag",
 
     # Data quality (used as model feature:low completeness = uncertain)
     "soil_feature_completeness",
@@ -50,10 +47,10 @@ ANNUAL_NUMERIC_FEATURES = [
 
 ANNUAL_CATEGORICAL_FEATURES = [
     "soil_texture_class",  
-    "climate_zone",         
-    "gdd_crop_class",      
-    "ph_band",           
-    "rainfall_band",       
+    "frost_zone",
+    "crop_heat_class",
+    "ph_band",
+    "rainfall_band",
     "water_stress_category",
 ]
 
@@ -64,24 +61,22 @@ SEASONAL_NUMERIC_FEATURES = [
     "avg_temp_c",
     "avg_max_temp_c",
     "avg_min_temp_c",
-    "avg_monthly_precip_mm",
+    "avg_monthly_rain_mm",
     "avg_solar_radiation_mj",
     "avg_humidity_pct",
-    "avg_daily_gdd",
     "avg_monthly_gdd",
     "avg_frost_days_in_month",
     "dry_day_fraction",
 
-    # Normalised seasonal ratios
-    "temp_seasonal_ratio",
-    "precip_seasonal_ratio",
-    "solar_seasonal_ratio",
+    # How this month compares with the city's year
+    "temp_vs_annual_mean_c",
+    "rain_vs_average_month_ratio",
+    "solar_vs_average_month_ratio",
 
-    # Interaction terms (static × dynamic)
-    "ph_x_temperature",
-    "nitrogen_x_rainfall",
-    "clay_x_rainfall",
-    "gdd_x_solar",
+    # Location context (the model learns interactions itself)
+    "soil_ph",
+    "clay_pct",
+    "nitrogen_g_kg",
 
     # Binary planting window flags
     "is_frost_free_month",
@@ -99,11 +94,11 @@ SEASONAL_NUMERIC_FEATURES = [
 ]
 
 SEASONAL_CATEGORICAL_FEATURES = [
-    "climate_zone",         
-    "soil_texture_class",   
-    "local_season",         
+    "frost_zone",
+    "soil_texture_class",
+    "local_season",
     "water_stress_category",
-    "gdd_crop_class",
+    "crop_heat_class",
 ]
 
 # TARGET COLUMNS
@@ -127,46 +122,39 @@ FEATURE_DESCRIPTIONS = {
     "nitrogen_deficient_flag":    "Nitrogen deficiency (1=yes)",
     "avg_annual_precip_mm":       "Average annual rainfall (mm)",
     "avg_frost_days_per_year":    "Average frost days per year",
-    "est_growing_season_days":    "Estimated growing season length (days)",
+    "frost_free_days_per_year":   "Frost-free days per year",
     "avg_annual_gdd":             "Average annual growing degree days",
     "temp_variability_c":         "Temperature variability (°C std dev)",
-    "climate_zone_ordinal":       "Climate zone (1=subarctic, 5=tropical)",
-    "aridity_index":              "Aridity index (0=desert, 1=humid)",
-    "current_water_deficit_mm":   "Current daily water deficit (mm)",
+    "frost_zone_ordinal":         "Frost zone (1=severe frost, 5=frost-free)",
+    "forecast_rain_to_evap_ratio": "Forecast rain divided by evapotranspiration (below 1 = dry)",
+    "water_deficit_mm_per_day":   "Water deficit over the forecast window (mm per day)",
     "irrigation_needed_flag":     "Irrigation currently needed (1=yes)",
-    "needs_legume_companion":     "Soil needs nitrogen-fixing companion (1=yes)",
-    "needs_drought_tolerant_companion": "Location needs drought-tolerant companion (1=yes)",
+    "water_stress_flag":          "Moderate or severe water stress (1=yes)",
     "soil_feature_completeness":  "Number of soil features populated (0-6)",
     "climate_feature_completeness": "Number of climate features populated (0-5)",
     "soil_texture_class":         "Soil texture type",
-    "climate_zone":               "Climate zone",
-    "gdd_crop_class":             "Crop heat requirement class",
+    "frost_zone":                 "Frost zone",
+    "crop_heat_class":            "Crop heat class (from yearly heat units)",
     "ph_band":                    "Soil pH band",
     "rainfall_band":              "Annual rainfall category",
     "water_stress_category":      "Current water stress level",
     "avg_temp_c":                 "Average monthly temperature (°C)",
     "avg_max_temp_c":             "Average monthly maximum temperature (°C)",
     "avg_min_temp_c":             "Average monthly minimum temperature (°C)",
-    "avg_monthly_precip_mm":      "Average monthly rainfall (mm)",
+    "avg_monthly_rain_mm":        "Average monthly rainfall (mm)",
     "avg_solar_radiation_mj":     "Monthly solar radiation (MJ/m²/day)",
     "avg_humidity_pct":           "Average monthly humidity (%)",
-    "avg_daily_gdd":              "Average daily growing degree days",
     "avg_monthly_gdd":            "Monthly growing degree days",
     "avg_frost_days_in_month":    "Average frost days this month",
     "dry_day_fraction":           "Fraction of dry days this month (< 1mm rain)",
-    "temp_seasonal_ratio":        "Temperature vs annual average ratio",
-    "precip_seasonal_ratio":      "Rainfall vs annual average ratio",
-    "solar_seasonal_ratio":       "Solar radiation vs annual average ratio",
-    "ph_x_temperature":           "Soil pH × temperature interaction",
-    "nitrogen_x_rainfall":        "Nitrogen × rainfall interaction",
-    "clay_x_rainfall":            "Clay content × rainfall interaction",
-    "gdd_x_solar":                "Monthly GDD × solar radiation interaction",
+    "temp_vs_annual_mean_c":      "Degrees warmer (+) or cooler (-) than the yearly mean",
+    "rain_vs_average_month_ratio": "Rainfall compared with an average month (1.0 = normal)",
+    "solar_vs_average_month_ratio": "Sunshine compared with an average month (1.0 = normal)",
     "is_frost_free_month":        "Month is frost-free (1=yes)",
     "is_high_rainfall_month":     "Month has high rainfall > 100mm (1=yes)",
     "is_good_planting_month":     "Good planting conditions this month (1=yes)",
     "tropical_crop_viable":       "Tropical crops viable this month (1=yes)",
     "cool_season_crop_viable":    "Cool-season crops viable this month (1=yes)",
-    "water_stress_flag":          "Moderate or severe water stress (1=yes)",
     "local_season":               "Local season (hemisphere-adjusted)",
     "month":                      "Month of year (1-12)",
     "monthly_feature_completeness": "Number of monthly climate features populated (0-5)",

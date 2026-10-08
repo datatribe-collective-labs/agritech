@@ -1,8 +1,7 @@
 -- Soil condition dimension.
 --
 -- GRAIN: one row per city (matches stg_soil).
--- SCD TYPE: 2 (via scd_soil snapshot) - tracks soil properties change
---           over time as farming practices alter soil chemistry.
+-- SCD TYPE: 1 (current values only); history is kept by the scd_soils snapshot.
 
 {{ config(materialized='table') }}
 
@@ -24,23 +23,13 @@ SELECT
     sand_pct,
     silt_pct,
     nitrogen_g_kg,
-    soc_g_kg,
+    organic_carbon_g_kg,
     soil_texture_class,
     nitrogen_deficient,
+    soil_ph_source,
 
-    -- pH band (categorical for ML and analyst filtering)
-    -- Bands follow standard agronomic classification.
-    CASE
-        WHEN soil_ph IS NULL          THEN 'unknown'
-        WHEN soil_ph < 4.5            THEN 'extremely_acidic'
-        WHEN soil_ph < 5.5            THEN 'very_strongly_acidic'
-        WHEN soil_ph < 6.0            THEN 'moderately_acidic'
-        WHEN soil_ph < 6.5            THEN 'slightly_acidic'
-        WHEN soil_ph < 7.0            THEN 'near_neutral'
-        WHEN soil_ph < 7.5            THEN 'neutral'
-        WHEN soil_ph < 8.0            THEN 'slightly_alkaline'
-        ELSE                               'alkaline'
-    END                               AS ph_band,
+    -- pH band (same definition as the ML tables)
+    {{ ph_band('soil_ph') }}          AS ph_band,
 
     -- Nitrogen band
     -- Bands based on FAO soil fertility thresholds - VALIDATION REQUIRED
@@ -56,11 +45,11 @@ SELECT
     -- Organic carbon band
     -- SOC is a key soil health indicator - VALIDATION REQUIRED
     CASE
-        WHEN soc_g_kg IS NULL         THEN 'unknown'
-        WHEN soc_g_kg < 5             THEN 'very_low'
-        WHEN soc_g_kg < 10            THEN 'low'
-        WHEN soc_g_kg < 20            THEN 'medium'
-        WHEN soc_g_kg < 30            THEN 'high'
+        WHEN organic_carbon_g_kg IS NULL THEN 'unknown'
+        WHEN organic_carbon_g_kg < 5             THEN 'very_low'
+        WHEN organic_carbon_g_kg < 10            THEN 'low'
+        WHEN organic_carbon_g_kg < 20            THEN 'medium'
+        WHEN organic_carbon_g_kg < 30            THEN 'high'
         ELSE                               'very_high'
     END                               AS organic_carbon_band,
 
@@ -76,15 +65,16 @@ SELECT
         ELSE                   'unknown'
     END                               AS water_retention_class,
 
-    -- Overall fertility score (0-5 ranking) - VALIDATION REQUIRED
-    -- Simple additive score for each positive soil attribute.
+    -- Soil fertility points, 0 to 4: one point each for
+    --   nitrogen of at least 1.0 g/kg | organic carbon of at least 10 g/kg
+    --   pH between 6.0 and 7.0        | loam, clay loam or silty texture
+    -- Simple count; the cut-offs are not yet validated by a soil scientist.
     (
-        CASE WHEN nitrogen_g_kg >= 2.0 THEN 1 ELSE 0 END
-      + CASE WHEN soc_g_kg >= 10       THEN 1 ELSE 0 END
+        CASE WHEN nitrogen_g_kg >= 1.0 THEN 1 ELSE 0 END
+      + CASE WHEN organic_carbon_g_kg >= 10 THEN 1 ELSE 0 END
       + CASE WHEN soil_ph BETWEEN 6.0 AND 7.0 THEN 1 ELSE 0 END
       + CASE WHEN soil_texture_class IN ('loam','clay_loam','silty') THEN 1 ELSE 0 END
-      + CASE WHEN nitrogen_deficient = FALSE THEN 1 ELSE 0 END
-    )                                 AS fertility_score,
+    )                                 AS soil_fertility_points,
 
     ingested_at
 
