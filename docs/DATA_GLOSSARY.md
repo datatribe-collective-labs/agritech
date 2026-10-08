@@ -16,6 +16,9 @@ Plain-language meaning of the main columns in the warehouse and the ML tables.
 | Current conditions score | 100 minus penalties for today's frost (30), heat (20), severe/moderate water stress (20/10), low soil nitrogen (10) and flood risk (10). A snapshot of today. |
 | Relationship score | Companion pair points (+3 beneficial, +1 neutral, -5 antagonistic) times evidence (x3 scientific, x2 traditional, x1 anecdotal). |
 | Soil fertility points | 0-4: nitrogen at least 1.0 g/kg, organic carbon at least 10 g/kg, pH 6-7, loam/clay loam/silty texture. |
+| Observed nearby | 1 if a crop was recorded within the search radius of a city, otherwise 0. The label of the species-by-city model (`mart_species_city_suitability`). A 0 can also mean nobody recorded the crop. |
+| Trait fit share | Share of three plain checks a crop passes in a city: enough months in its optimal temperature range to mature, enough frost-free months (or frost hardy), and soil pH inside its optimal range. A check that cannot be worked out is left out, never assumed. |
+| Suitability score | Probability from the species-by-city model that a crop is recorded near a city. Always scored by a model that was trained without that city. |
 
 ## Rules of thumb that still need expert validation
 Soil texture classes, nitrogen cut-off (1.0 g/kg), water stress and irrigation urgency bands,
