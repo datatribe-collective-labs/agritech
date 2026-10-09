@@ -163,6 +163,22 @@ class CityContext(BaseModel):
     caveats: List[str]
 
 
+class TrainingRun(BaseModel):
+    """One retraining attempt: what was tested, and whether the model was allowed to go live."""
+    run_id: str
+    trained_at: Optional[str] = None
+    status: str                                   # "accepted" (went live) or "rejected"
+    rejected_because: Optional[str] = None
+    model_auc: Optional[float] = None
+    best_baseline: Optional[str] = None
+    gain_over_baseline_auc: Optional[float] = None
+    gain_range_low: Optional[float] = None
+    gain_range_high: Optional[float] = None
+    top_n_hit_rate: Optional[float] = None
+    cities: Optional[int] = None
+    rows_used: Optional[int] = None
+
+
 class ModelInfo(BaseModel):
     verdict: Optional[str] = None
     trained_at: Optional[str] = None

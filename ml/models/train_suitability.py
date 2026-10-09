@@ -242,42 +242,62 @@ def verdict(results: dict) -> str:
             "Use the baseline until there is more data.")
 
 
+def train_and_evaluate(df: pd.DataFrame):
+    """
+    The whole modelling step, with no saving: score every crop-city pair on cities the model
+    has not seen, test it against the baselines, and keep the reasons behind each score.
+    Returns (scored, contributions, results).
+    """
+    scored, contributions = leave_one_city_out_scores(df, with_contributions=True)
+    results = evaluate(scored)
+    results["verdict"] = verdict(results)
+    results["trained_at"] = datetime.now().isoformat(timespec="seconds")
+    return scored, contributions, results
+
+
+def fit_final_model(df: pd.DataFrame) -> XGBClassifier:
+    """The model trained on all cities, for scoring cities that are not in the data yet."""
+    model = XGBClassifier(**XGBOOST_PARAMS)
+    model.fit(_features_as_numbers(df), df[LABEL].astype(int))
+    return model
+
+
+def scores_to_save(scored: pd.DataFrame) -> pd.DataFrame:
+    """
+    The table the AI layer and the API read. Scores are the leave-one-city-out ones, so a
+    city's score never comes from a model that was trained on that city.
+    """
+    scores = scored[["city", "species", LABEL, "model_score"]].rename(
+        columns={"model_score": "suitability_score"})
+    scores["suitability_score"] = scores["suitability_score"].round(4)
+    scores["rank_in_city"] = (
+        scores.groupby("city")["suitability_score"].rank(ascending=False, method="first").astype(int)
+    )
+    return scores
+
+
 def main(dry_run: bool = False):
+    """Manual run: train, print the test results and (unless dry run) save everything."""
     df = load_suitability_features()
     print(f"[suitability] {len(df)} rows, {df['city'].nunique()} cities, "
           f"{df['species'].nunique()} species, "
           f"{df[LABEL].mean():.1%} of pairs recorded")
 
-    scored, contributions = leave_one_city_out_scores(df, with_contributions=True)
-    results = evaluate(scored)
-    results["verdict"] = verdict(results)
-    results["trained_at"] = datetime.now().isoformat(timespec="seconds")
-
+    scored, contributions, results = train_and_evaluate(df)
     print(json.dumps(results, indent=2))
 
     if dry_run:
         print("[suitability] dry run: nothing saved")
         return
 
-    # Final model on all cities, for scoring cities that are not in the data yet.
-    final_model = XGBClassifier(**XGBOOST_PARAMS)
-    final_model.fit(_features_as_numbers(df), df[LABEL].astype(int))
-
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     with open(MODEL_DIR / "suitability_model.pkl", "wb") as f:
-        pickle.dump({"model": final_model, "features": FEATURES}, f)
+        pickle.dump({"model": fit_final_model(df), "features": FEATURES}, f)
     with open(REPORT_DIR / "suitability_latest.json", "w") as f:
         json.dump(results, f, indent=2)
 
-    # Scores saved for the AI layer are the leave-one-city-out ones, so a city's score
-    # never comes from a model that was trained on that city.
-    predictions = scored[["city", "species", LABEL, "model_score"]].rename(
-        columns={"model_score": "suitability_score"})
-    predictions["suitability_score"] = predictions["suitability_score"].round(4)
-    predictions["rank_in_city"] = (
-        predictions.groupby("city")["suitability_score"].rank(ascending=False, method="first").astype(int)
-    )
+    predictions = scores_to_save(scored)
     save_predictions(predictions, "ml_species_city_suitability")
     print(f"[suitability] saved {len(predictions)} scores to ml_species_city_suitability")
 

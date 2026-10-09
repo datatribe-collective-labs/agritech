@@ -34,6 +34,8 @@ CREATE TABLE mart_plant_profiles (species, common_name, family, functional_group
 CREATE TABLE mart_city_companions (city, pair_rank, species_a, species_b, mechanism, benefit_category,
   evidence_level, relationship_score, relationship, notes, evidence_source, source_url);
 CREATE TABLE ml_species_city_suitability (city, species, observed_nearby, suitability_score, rank_in_city);
+CREATE TABLE ml_training_runs (run_id, trained_at, status, rejected_because, data_fingerprint, rows_used, cities,
+  model_auc, best_baseline, gain_over_baseline_auc, gain_range_low, gain_range_high, top_n_hit_rate);
 CREATE TABLE ml_species_city_explanations (city, species, reason_rank, feature, feature_label, feature_value,
   effect, contribution, reason);
 """
@@ -207,6 +209,23 @@ def test_model_info_reports_the_verdict_and_caveats(client):
     assert "beats the best simple baseline" in body["verdict"]
     assert body["gain_95_percent_range"] == [0.03, 0.14]
     assert body["caveats"]
+
+
+def test_training_history_lists_newest_run_first(client):
+    with client.app.state.engine.begin() as c:
+        c.execute(text("""INSERT INTO ml_training_runs (run_id, trained_at, status, rejected_because, model_auc,
+            gain_over_baseline_auc) VALUES
+            ('2026-10-04_09-00-00-100','2026-10-04T09:00:00','accepted','',0.80,0.05),
+            ('2026-10-11_09-00-00-100','2026-10-11T09:00:00','rejected','The model does not beat the baseline',0.70,-0.01)"""))
+    runs = client.get("/model/runs").json()
+    assert [r["status"] for r in runs] == ["rejected", "accepted"]
+    assert "does not beat" in runs[0]["rejected_because"]
+
+
+def test_training_history_is_empty_before_the_first_run(client):
+    with client.app.state.engine.begin() as c:
+        c.execute(text("DROP TABLE ml_training_runs"))
+    assert client.get("/model/runs").json() == []
 
 
 def test_missing_table_gives_503_without_leaking_sql(client):
