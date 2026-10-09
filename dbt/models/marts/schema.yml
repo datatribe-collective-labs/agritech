@@ -192,3 +192,9 @@ models:
           - not_null
       - name: pair_rank
         description: 1 is the best pair for the city (strongest relationship, then the more recorded crops).
+      - name: relationship
+        description: beneficial or neutral (antagonistic pairs are not listed).
+      - name: notes
+        description: One-sentence plain explanation of why the pair works.
+      - name: evidence_source
+        description: Where the pair comes from, including a plain note when it has not been checked against a paper.
