@@ -221,3 +221,6 @@ __marimo__/
 dbt_packages/
 venvs/
 venvs/
+
+# Every retraining run keeps its own model copy (see ml/MLOPS.md); they are rebuilt, not versioned in git
+ml/saved_models/suitability_runs/
