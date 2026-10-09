@@ -7,9 +7,9 @@ from sqlalchemy.engine import Connection
 
 from api.caveats import CAVEATS, NO_RECOMMENDATIONS, NO_SOIL_DATA
 from api.db import first, get_connection, rows
-from api.routers.deps import Tables, known_city, tables
+from api.routers.deps import Tables, known_city, known_species, tables
 from api.schemas import (CityContext, CityDetail, CityPlantDetail, CityPlants, CitySummary,
-                         Companion, MonthlyClimate)
+                         Companion, MonthlyClimate, PlantCompanion)
 
 router = APIRouter(prefix="/cities", tags=["cities"])
 
@@ -126,6 +126,25 @@ def city_plant_detail(species: str, city: str = Depends(known_city),
     return {**plant, "fit": row, "traits": traits}
 
 
+@router.get("/{city}/plants/{species}/companions", response_model=List[PlantCompanion],
+            summary="Crops that grow well with this crop near this city, with the reason why")
+def plant_companions(species: str = Depends(known_species), city: str = Depends(known_city),
+                     conn: Connection = Depends(get_connection), t: Tables = Depends(tables)):
+    return rows(conn, f"""
+        SELECT CASE WHEN c.species_a = :s THEN c.species_b ELSE c.species_a END AS partner,
+               p.common_name AS partner_common_name, p.functional_group AS partner_functional_group,
+               r.rank_in_city AS partner_rank_in_city,
+               c.relationship, c.mechanism, c.benefit_category, c.evidence_level, c.relationship_score,
+               c.notes, c.evidence_source, c.source_url
+        FROM {t.companions} c
+        LEFT JOIN {t.profiles} p
+               ON p.species = CASE WHEN c.species_a = :s THEN c.species_b ELSE c.species_a END
+        LEFT JOIN {t.scores} r
+               ON r.city = c.city AND r.species = p.species
+        WHERE c.city = :city AND (c.species_a = :s OR c.species_b = :s)
+        ORDER BY c.relationship_score DESC, c.pair_rank""", city=city, s=species)
+
+
 @router.get("/{city}/climate/monthly", response_model=List[MonthlyClimate],
             summary="Average climate for each calendar month (10-year NASA average)")
 def city_monthly_climate(city: str = Depends(known_city), conn: Connection = Depends(get_connection),
@@ -142,7 +161,7 @@ def city_companions(city: str = Depends(known_city), limit: int = Query(10, ge=1
                     conn: Connection = Depends(get_connection), t: Tables = Depends(tables)):
     return rows(conn, f"""
         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
-               relationship_score, notes
+               relationship_score, relationship, notes, evidence_source, source_url
         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT :limit""", city=city, limit=limit)
 
 
@@ -154,7 +173,7 @@ def city_context(city: str = Depends(known_city), conn: Connection = Depends(get
     top = _city_plants(conn, t, city, limit=5)
     companions = rows(conn, f"""
         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
-               relationship_score, notes
+               relationship_score, relationship, notes, evidence_source, source_url
         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT 5""", city=city)
     caveats = list(CAVEATS) if top else [_why_no_scores(conn, t, city)]
     return {"city": detail, "recommendations_available": bool(top), "top_plants": top,
