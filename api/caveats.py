@@ -14,3 +14,8 @@ NO_RECOMMENDATIONS = (
     "No crop has been recorded within 100 km of this city, so there is no local record to compare "
     "against and no recommendation is shown."
 )
+
+NO_SOIL_DATA = (
+    "This city has no soil pH measurement in the soil database (WoSIS), so crops cannot be checked "
+    "against its soil and no recommendation is shown."
+)
