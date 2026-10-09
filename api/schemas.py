@@ -132,7 +132,26 @@ class Companion(BaseModel):
     benefit_category: Optional[str] = None
     evidence_level: Optional[str] = None
     relationship_score: Optional[int] = None
+    relationship: Optional[str] = None
     notes: Optional[str] = None
+    evidence_source: Optional[str] = None
+    source_url: Optional[str] = None
+
+
+class PlantCompanion(BaseModel):
+    """The partner of one crop in one city, with the reason the pair works."""
+    partner: str
+    partner_common_name: Optional[str] = None
+    partner_functional_group: Optional[str] = None
+    partner_rank_in_city: Optional[int] = None   # empty when the partner has no score in this city
+    relationship: Optional[str] = None
+    mechanism: Optional[str] = None
+    benefit_category: Optional[str] = None
+    evidence_level: Optional[str] = None
+    relationship_score: Optional[int] = None
+    notes: Optional[str] = None
+    evidence_source: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class CityContext(BaseModel):

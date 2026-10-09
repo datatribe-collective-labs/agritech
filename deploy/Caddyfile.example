@@ -1,0 +1,19 @@
+# /etc/caddy/Caddyfile  (replace the IP with the server's; dots become dashes)
+
+# The API
+94-237-15-238.sslip.io {
+    reverse_proxy 127.0.0.1:8000
+}
+
+# The website farmers open
+app.94-237-15-238.sslip.io {
+    root * /var/www/planting-intelligence
+    encode zstd gzip
+    file_server
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    @assets path /fonts/* /css/* /js/*
+    header @assets Cache-Control "public, max-age=3600"
+}
