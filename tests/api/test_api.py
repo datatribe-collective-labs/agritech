@@ -50,7 +50,8 @@ def client(tmp_path, monkeypatch):
             soil_ph, last_updated_at) VALUES
             ('Lagos','NG',6.5,3.4,'frost_free',5.9,'2026-10-01 06:00:00'),
             ('Nairobi','KE',-1.3,36.8,'frost_free',6.2,'2026-10-01 06:00:00'),
-            ('Harare','ZW',-17.8,31.0,'light_frost',NULL,NULL)"""))
+            ('Harare','ZW',-17.8,31.0,'frost_free',5.8,NULL),
+            ('Hanoi','VN',21.0,105.8,'frost_free',NULL,NULL)"""))
         c.execute(text("""INSERT INTO mart_planting_features (city, month, month_name, avg_temp_c, is_frost_free_month,
             is_good_planting_month) VALUES ('Lagos',2,'Feb',28.1,1,1),('Lagos',1,'Jan',27.0,1,0)"""))
         c.execute(text("""INSERT INTO mart_plant_profiles (species, common_name, family, functional_group,
@@ -87,16 +88,17 @@ def test_health(client):
 
 def test_all_cities_flags_the_city_without_scores(client):
     cities = {c["city"]: c for c in client.get("/cities").json()}
-    assert set(cities) == {"Harare", "Lagos", "Nairobi"}
+    assert set(cities) == {"Hanoi", "Harare", "Lagos", "Nairobi"}
     assert cities["Lagos"]["has_recommendations"] is True
     assert cities["Harare"]["has_recommendations"] is False
-    assert cities["Harare"]["soil_ph"] is None          # missing stays empty
+    assert cities["Hanoi"]["soil_ph"] is None           # missing stays empty
 
 
 def test_city_filters(client):
     assert [c["city"] for c in client.get("/cities?search=la").json()] == ["Lagos"]
     assert [c["city"] for c in client.get("/cities?country=ke").json()] == ["Nairobi"]
-    assert [c["city"] for c in client.get("/cities?has_recommendations=false").json()] == ["Harare"]
+    unscored = client.get("/cities?has_recommendations=false").json()
+    assert [c["city"] for c in unscored] == ["Hanoi", "Harare"]
 
 
 def test_city_lookup_ignores_capitals_and_unknown_city_is_404(client):
@@ -127,7 +129,14 @@ def test_city_without_scores_says_so_instead_of_inventing_any(client):
     body = client.get("/cities/Harare/plants").json()
     assert body["recommendations_available"] is False
     assert body["plants"] == []
-    assert "no recommendation" in body["message"]
+    assert "No crop has been recorded" in body["message"]
+
+
+def test_city_without_soil_ph_gets_its_own_reason(client):
+    body = client.get("/cities/Hanoi/plants").json()
+    assert body["recommendations_available"] is False
+    assert "no soil pH measurement" in body["message"]
+    assert "no soil pH measurement" in client.get("/cities/Hanoi/context").json()["caveats"][0]
 
 
 def test_one_plant_in_one_city_has_fit_checks_and_crop_needs(client):
