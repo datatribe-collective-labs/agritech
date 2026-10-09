@@ -107,3 +107,54 @@ models:
         description: Count 0-5 of populated monthly climate features.
         tests:
           - not_null
+
+  - name: mart_species_city_suitability
+    description: >
+      ML Feature Table C. One row per crop species and city: "does this crop suit this city?"
+      Covers every city with usable soil pH and frost data and at least one recorded crop within
+      suitability_radius_km (default 100 km), and every species in dim_plant_traits.
+      The label observed_nearby says whether the crop was recorded near the city; it is a proxy
+      for suitability, not a measurement of how well the crop grows.
+      The fit-check columns compare what the crop needs with what the city offers, using plain
+      arithmetic. A check that cannot be worked out stays empty.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - city
+            - species
+    columns:
+      - name: city
+        description: City name.
+        tests:
+          - not_null
+      - name: species
+        description: Scientific name of the crop, as in dim_plant_traits.
+        tests:
+          - not_null
+      - name: observed_nearby
+        description: 1 if the crop was recorded within suitability_radius_km (default 100 km) of the city, otherwise 0. This is the ML label.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: observation_count
+        description: Number of recorded observations of the crop near the city. Shown for information; never used as an ML feature.
+      - name: months_in_optimal_temp
+        description: Months (0 to 12) whose average temperature lies inside the crop's optimal temperature range.
+      - name: frost_free_months
+        description: Months (0 to 12) with no frost days at the city.
+      - name: months_to_mature
+        description: Whole months the crop needs to reach maturity (shortest days to maturity, in 30-day months).
+      - name: enough_warm_months
+        description: 1 if months_in_optimal_temp is at least months_to_mature, otherwise 0.
+      - name: enough_frost_free_months
+        description: 1 if the crop is frost hardy, or the city has at least as many frost-free months as the crop needs to mature; otherwise 0.
+      - name: ph_gap
+        description: How far the soil pH is outside the crop's optimal pH range, in pH units. 0 means inside the range.
+      - name: trait_fit_share
+        description: Share of the checks that could be worked out (warm months, frost-free months, pH) that the crop passes, from 0 to 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND trait_fit_share <= 1"
+              where: "trait_fit_share IS NOT NULL"
