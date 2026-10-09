@@ -23,6 +23,10 @@ from airflow.operators.bash import BashOperator
 
 REPO = "/root/agritech"
 DBT_COMMAND = f"{REPO}/venvs/dbt/bin/dbt"
+
+# Where dbt writes the mart tables in production. The ML code defaults to the local
+# docker name (public_marts), so the production name must be given to it explicitly.
+PRODUCTION_MARTS_SCHEMA = "planting_intelligence_marts"
 ML_PYTHON = f"{REPO}/venvs/ml/bin/python"
 
 default_args = {
@@ -53,6 +57,8 @@ with DAG(
         task_id="retrain_and_publish_if_good_enough",
         bash_command=f"cd {REPO} && {ML_PYTHON} -m ml.mlops.retrain_suitability",
         execution_timeout=timedelta(minutes=30),
+        env={"PLANTING_MARTS_SCHEMA": PRODUCTION_MARTS_SCHEMA},
+        append_env=True,  # keep the database settings the task already has
         # A rejected model is not a glitch, so trying again an hour later would only repeat it.
         retries=0,
     )
