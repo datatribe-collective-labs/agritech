@@ -1,7 +1,5 @@
 /* Planting Intelligence. Mobile first. Colours are named for what they measure. */
 
-@font-face { font-family: "Bricolage Grotesque"; src: url("../fonts/bricolage-grotesque-latin-wght-normal.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
-@font-face { font-family: "Figtree"; src: url("../fonts/figtree-latin-wght-normal.woff2") format("woff2"); font-weight: 300 900; font-display: swap; }
 
 :root {
   --chalk: #f2f5ea;
@@ -25,9 +23,11 @@
   --radius: 16px;
   --radius-sm: 10px;
   --ease: cubic-bezier(.2, .7, .2, 1);
-  --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
-  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: var(--font-display), "Trebuchet MS", system-ui, sans-serif;
+  --body: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
   --gutter: clamp(16px, 4vw, 40px);
+  --edge: max(var(--gutter), calc((100vw - 1120px) / 2 + var(--gutter)));
+  --topbar-h: 57px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,12 +40,12 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; scroll-padding-top: 120px; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 110px; }
 body {
   margin: 0; overflow-x: clip; background: var(--chalk); color: var(--ink);
   font: 400 1.0625rem/1.55 var(--body); min-height: 100vh; display: flex; flex-direction: column;
 }
-main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px var(--gutter) 56px; outline: none; }
+main { flex: 1; min-width: 0; width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px var(--gutter) 56px; outline: none; }
 h1, h2, h3 { font-family: var(--display); line-height: 1.12; margin: 0; letter-spacing: -.015em; color: var(--ink); }
 h1 { font-size: clamp(2rem, 6.2vw, 3.4rem); font-weight: 700; }
 h1:focus, h1:focus-visible { outline: none; }
@@ -56,46 +56,45 @@ a { color: var(--leaf-deep); text-underline-offset: 3px; }
 a:hover { color: var(--leaf); }
 :focus-visible { outline: 3px solid var(--marigold); outline-offset: 3px; border-radius: 6px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.skip { position: absolute; left: 12px; top: -60px; background: var(--leaf-deep); color: #fff; padding: 10px 14px; border-radius: 8px; z-index: 30; }
+.skip { position: absolute; left: 12px; top: -60px; z-index: 40; background: var(--leaf-deep); color: #fff; padding: 10px 14px; border-radius: 8px; z-index: 30; }
 .skip:focus { top: 10px; }
 .muted { color: var(--ink-soft); }
 .small { font-size: .9rem; }
 .latin { font-style: italic; color: var(--ink-soft); }
 [hidden] { display: none !important; }
 
-/* Top bar: brand, you-are-here trail, about link */
+/* Top bar and the "you are here" trail (every part of the trail is a link) */
 .topbar {
-  position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: 1fr auto; align-items: center;
-  gap: 4px 16px; padding: 10px var(--gutter); background: color-mix(in srgb, var(--chalk) 88%, transparent);
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; height: var(--topbar-h); padding: 0 var(--gutter); background: color-mix(in srgb, var(--chalk) 90%, transparent);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
 }
-.brand { grid-row: 1; grid-column: 1; display: inline-flex; align-items: center; gap: 10px; color: var(--leaf); text-decoration: none; font: 700 1.05rem var(--display); letter-spacing: -.01em; }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--leaf); text-decoration: none; font: 700 1.05rem var(--display); letter-spacing: -.01em; }
 .brand span { color: var(--ink); }
-.about-link { grid-row: 1; grid-column: 2; font-size: .95rem; font-weight: 600; text-decoration: none; padding: 8px 4px; }
+.about-link { font-size: .95rem; font-weight: 600; text-decoration: none; padding: 8px 4px; }
 .about-link:hover { text-decoration: underline; }
-.crumbs { grid-row: 2; grid-column: 1 / -1; overflow-x: auto; scrollbar-width: none; }
-.crumbs::-webkit-scrollbar { display: none; }
-.crumbs ol { display: flex; gap: 0; list-style: none; margin: 0; padding: 0; white-space: nowrap; font-size: .95rem; }
-.crumbs li { display: inline-flex; align-items: center; }
-.crumbs li + li::before { content: "/"; color: var(--ink-soft); opacity: .6; margin: 0 .55em; }
-.crumbs a { display: inline-block; padding: 8px 2px; font-weight: 600; text-decoration: none; }
-.crumbs a:hover { text-decoration: underline; }
-.crumbs [aria-current] { display: inline-block; padding: 8px 2px; color: var(--ink-soft); font-weight: 500; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
-@media (min-width: 820px) {
-  .topbar { grid-template-columns: auto 1fr auto; gap: 24px; }
-  .crumbs { grid-row: 1; grid-column: 2; }
-  .about-link { grid-column: 3; }
-  .crumbs [aria-current] { max-width: 40ch; }
+.trail {
+  position: sticky; top: var(--topbar-h); z-index: 15; width: 100vw; margin-left: calc(50% - 50vw); padding: 0 var(--edge);
+  background: color-mix(in srgb, var(--chalk) 90%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
 }
+.trail::-webkit-scrollbar { display: none; }
+.trail ol { display: flex; list-style: none; margin: 0; padding: 0; white-space: nowrap; font-size: .95rem; }
+.trail li { display: inline-flex; align-items: center; }
+.trail li + li::before { content: "/"; color: var(--ink-soft); opacity: .6; margin: 0 .55em; }
+.trail a { display: inline-block; padding: 10px 2px; font-weight: 600; text-decoration: none; }
+.trail a:hover { text-decoration: underline; }
+.trail [aria-current] { display: inline-block; padding: 10px 2px; color: var(--ink-soft); font-weight: 500; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; }
 
-/* Page change: the browser cross-fades the page where it can */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; }
+/* Each page eases in once when you move between screens */
+.page { animation: page-in .28s var(--ease) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* Hero, the one orchestrated moment: seedlings grow out of the soil layers */
 .hero {
   --field: clamp(170px, 22vw, 250px);
   position: relative; width: 100vw; margin: 8px 0 0 calc(50% - 50vw); overflow: hidden;
-  padding: clamp(28px, 7vw, 72px) max(var(--gutter), calc((100vw - 1120px) / 2 + var(--gutter))) 0;
+  padding: clamp(28px, 7vw, 72px) var(--edge) 0;
 }
 .hero-text { position: relative; z-index: 1; max-width: 640px; padding-bottom: calc(var(--field) * .84); }
 .lede { font-size: clamp(1.1rem, 2.6vw, 1.3rem); color: var(--ink-soft); margin-top: 16px; }
@@ -257,7 +256,6 @@ a:hover { color: var(--leaf); }
 .skeleton { display: grid; gap: 14px; padding-top: 40px; }
 .skeleton i { display: block; height: 72px; border-radius: var(--radius); background: linear-gradient(90deg, var(--line) 25%, var(--paper) 50%, var(--line) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 .skeleton i:first-child { height: 120px; width: min(100%, 560px); }
-main.loading { opacity: .6; transition: opacity .2s .15s; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .foot { border-top: 1px solid var(--line); padding: 24px var(--gutter) 36px; color: var(--ink-soft); font-size: .92rem; text-align: center; }
 .foot p { margin: 0 auto .4em; }

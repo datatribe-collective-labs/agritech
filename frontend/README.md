@@ -1,29 +1,43 @@
 # Planting Intelligence website
 
-A static site (no build step) that talks to the API. Screens: choose a city, crops for the city, companion crops for a crop (with the reason and the source), and an About page.
+Next.js (App Router, TypeScript). Screens: choose a city, crops for the city, companion crops for a crop (with the reason and the source), and an About page. Every screen has its own address, a "you are here" trail where each part is a link, and a back link; the browser's Back button works.
 
-    frontend/
-      index.html        page shell, top bar with the "you are here" trail
-      config.js         the API address (the only setting)
-      css/styles.css    layout, colours, animation (works from phone to wide laptop)
-      js/format.js      safe templating and plain-language wording (unit tested)
-      js/api.js         API calls
-      js/views.js       the screens
-      js/main.js        routing (links look like #/city/Lagos/plant/Zea%20mays)
-      fonts/            Bricolage Grotesque and Figtree, SIL Open Font Licence
+    app/                 pages (/, /city/[city], /city/[city]/plant/[species], /about), layout, fonts, styles
+    components/          Trail, CityPicker, CropList, Parts (stat tiles, companion card, year chart), Sprouts
+    lib/api.ts           server-side calls to the API (the browser never calls the API)
+    lib/format.ts        plain-language wording for the API's codes (unit tested)
 
-Every page has a link in the URL, so a farmer can share or bookmark any screen, and the browser's Back button works.
+Pages are fetched on the server and kept for five minutes, so a new model run shows up on its own.
 
-## Try it locally
+## Settings
 
-    python -m http.server 8002 --directory frontend
-    # open http://127.0.0.1:8002 (the API must allow this origin: API_CORS_ORIGINS=http://127.0.0.1:8002)
+| Variable | Meaning | Default |
+|---|---|---|
+| `API_URL` | where the API lives, as seen from the server running the website | `https://94-237-15-238.sslip.io` |
+
+## Run it on your laptop
+
+    cd frontend
+    npm install
+    API_URL=https://94-237-15-238.sslip.io npm run dev      # open http://localhost:3000
 
 ## Tests
 
-    node --test frontend/tests/format.test.mjs
+    npm test          # wording and fit-check logic
+    npm run lint      # TypeScript check
 
-## Publish (on the server)
+## Deploy on the server
+
+First time only (Node 20.9 or newer is required; `node -v`):
+
+    apt install -y nodejs npm            # only if node is missing
+    cp deploy/planting-web.service /etc/systemd/system/
+    cp deploy/Caddyfile.example /etc/caddy/Caddyfile && systemctl reload caddy
+    systemctl daemon-reload && systemctl enable planting-web
+
+Every update:
 
     git pull
-    ./deploy/publish-frontend.sh
+    ./deploy/deploy-web.sh
+
+Fonts (Bricolage Grotesque, Figtree) are included under the SIL Open Font Licence, so the site loads nothing from other servers.
