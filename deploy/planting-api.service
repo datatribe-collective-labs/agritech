@@ -1,0 +1,15 @@
+# systemd unit for the API. Install: see api/README.md
+[Unit]
+Description=Planting Intelligence API
+After=network-online.target
+
+[Service]
+EnvironmentFile=/root/airflow_home/airflow.env
+Environment=PLANTING_MARTS_SCHEMA=planting_intelligence_marts
+Environment=API_CORS_ORIGINS=http://localhost:3000
+WorkingDirectory=/root/agritech
+ExecStart=/root/agritech/venvs/api/bin/uvicorn api.main:create_app --factory --host 127.0.0.1 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

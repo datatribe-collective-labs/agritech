@@ -1,0 +1,7 @@
+# Runtime and test dependencies for the API (install in its own venv: venvs/api)
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+httpx
+pytest
