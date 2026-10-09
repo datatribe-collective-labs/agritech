@@ -64,6 +64,23 @@ def load_seasonal_features() -> pd.DataFrame:
     return df
 
 
+def load_suitability_features() -> pd.DataFrame:
+    """
+    Loads mart_species_city_suitability: one row per crop species and city.
+    """
+    engine = get_engine()
+    query = text(f"""
+        SELECT *
+        FROM {marts_schema()}.mart_species_city_suitability
+        ORDER BY city, species
+    """)
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn)
+
+    print(f"[db] Loaded {len(df)} species-city rows")
+    return df
+
+
 def save_predictions(predictions_df: pd.DataFrame, table_name: str):
     """
     Saves model predictions back to Postgres for the AI layer to read.
