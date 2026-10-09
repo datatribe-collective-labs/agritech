@@ -21,6 +21,7 @@ class Tables:
         self.companions = table("mart_city_companions", schema)
         self.scores = table("ml_species_city_suitability", schema)
         self.reasons = table("ml_species_city_explanations", schema)
+        self.runs = table("ml_training_runs", schema)
 
 
 def known_city(city: str, conn: Connection = Depends(get_connection), t: Tables = Depends(tables)) -> str:
