@@ -158,3 +158,37 @@ models:
           - dbt_utils.expression_is_true:
               expression: ">= 0 AND trait_fit_share <= 1"
               where: "trait_fit_share IS NOT NULL"
+
+  - name: mart_plant_profiles
+    description: >
+      One row per crop species with its needs (soil pH, temperature, days to maturity, water,
+      frost) in plain columns. Served by the API. A blank trait stays empty; trait_source says
+      where the numbers came from.
+    columns:
+      - name: species
+        description: Scientific name of the crop.
+        tests:
+          - unique
+          - not_null
+      - name: common_name
+        description: Everyday name of the crop.
+      - name: trait_source
+        description: Where the trait values come from. Several rows are a general agronomic reference, not individually checked against a paper.
+
+  - name: mart_city_companions
+    description: >
+      Companion crop pairs offered for each city: both crops recorded near the city and the pair
+      is not antagonistic. pair_rank 1 is the best pair for the city. Served by the API.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - city
+            - species_a
+            - species_b
+    columns:
+      - name: city
+        description: City name.
+        tests:
+          - not_null
+      - name: pair_rank
+        description: 1 is the best pair for the city (strongest relationship, then the more recorded crops).
