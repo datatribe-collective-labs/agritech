@@ -32,7 +32,7 @@ CREATE TABLE mart_plant_profiles (species, common_name, family, functional_group
   optimal_ph_max, optimal_temp_min_c, optimal_temp_max_c, days_to_maturity_min, days_to_maturity_max, notes,
   trait_source, source_url);
 CREATE TABLE mart_city_companions (city, pair_rank, species_a, species_b, mechanism, benefit_category,
-  evidence_level, relationship_score, notes);
+  evidence_level, relationship_score, relationship, notes, evidence_source, source_url);
 CREATE TABLE ml_species_city_suitability (city, species, observed_nearby, suitability_score, rank_in_city);
 CREATE TABLE ml_species_city_explanations (city, species, reason_rank, feature, feature_label, feature_value,
   effect, contribution, reason);
@@ -73,7 +73,8 @@ def client(tmp_path, monkeypatch):
              'Soil pH distance outside the ideal range: 0 raises its score compared with others in Lagos')"""))
         c.execute(text("""INSERT INTO mart_city_companions VALUES
             ('Lagos',1,'Zea mays','Phaseolus vulgaris','nitrogen_fixation','nutrient_sharing',
-             'scientific',9,'Three Sisters')"""))
+             'scientific',9,'beneficial','Beans fix nitrogen that feeds maize',
+             'VERIFIED - Zhang 2014','https://example.org/z')"""))
 
     report = tmp_path / "report.json"
     report.write_text(json.dumps({"verdict": "The model beats the best simple baseline.", "rows": 6, "cities": 2,
@@ -158,6 +159,24 @@ def test_companions(client):
     pairs = client.get("/cities/Lagos/companions").json()
     assert pairs[0]["species_b"] == "Phaseolus vulgaris" and pairs[0]["relationship_score"] == 9
     assert client.get("/cities/Nairobi/companions").json() == []
+
+
+def test_companions_of_a_plant_work_from_either_side_of_the_pair(client):
+    maize = client.get("/cities/Lagos/plants/Zea mays/companions").json()
+    bean = client.get("/cities/lagos/plants/phaseolus vulgaris/companions").json()
+    assert [c["partner"] for c in maize] == ["Phaseolus vulgaris"]
+    assert [c["partner"] for c in bean] == ["Zea mays"]
+    pair = maize[0]
+    assert pair["partner_common_name"] == "Common Bean"
+    assert pair["partner_rank_in_city"] == 2                 # the partner's own rank in Lagos
+    assert pair["notes"] == "Beans fix nitrogen that feeds maize"
+    assert pair["evidence_source"].startswith("VERIFIED") and pair["source_url"]
+    assert bean[0]["partner_rank_in_city"] == 1
+
+
+def test_plant_without_companions_in_a_city_gets_an_empty_list(client):
+    assert client.get("/cities/Nairobi/plants/Zea mays/companions").json() == []
+    assert client.get("/cities/Lagos/plants/Banana/companions").status_code == 404
 
 
 def test_plant_catalogue(client):
