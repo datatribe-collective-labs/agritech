@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.engine import Connection
 
-from api.caveats import CAVEATS, NO_RECOMMENDATIONS
+from api.caveats import CAVEATS, NO_RECOMMENDATIONS, NO_SOIL_DATA
 from api.db import first, get_connection, rows
 from api.routers.deps import Tables, known_city, tables
 from api.schemas import (CityContext, CityDetail, CityPlantDetail, CityPlants, CitySummary,
@@ -26,6 +26,12 @@ def _reasons_by_species(conn: Connection, t: Tables, city: str) -> dict:
             "rank": r["reason_rank"], "text": r["reason"], "effect": r["effect"],
             "feature_label": r["feature_label"], "feature_value": r["feature_value"]})
     return grouped
+
+
+def _why_no_scores(conn: Connection, t: Tables, city: str) -> str:
+    """The true reason a city has no scores: no soil pH, or no crop recorded nearby."""
+    found = first(conn, f"SELECT soil_ph, frost_zone FROM {t.annual} WHERE city = :city", city=city)
+    return NO_SOIL_DATA if found["soil_ph"] is None or found["frost_zone"] is None else NO_RECOMMENDATIONS
 
 
 def _city_plants(conn: Connection, t: Tables, city: str, limit: int,
@@ -100,7 +106,7 @@ def city_plants(
     plants = _city_plants(conn, t, city, limit, functional_group, min_score)
     available = bool(first(conn, f"SELECT 1 AS found FROM {t.scores} WHERE city = :city", city=city))
     return {"city": city, "recommendations_available": available,
-            "message": None if available else NO_RECOMMENDATIONS, "plants": plants}
+            "message": None if available else _why_no_scores(conn, t, city), "plants": plants}
 
 
 @router.get("/{city}/plants/{species}", response_model=CityPlantDetail,
@@ -150,6 +156,6 @@ def city_context(city: str = Depends(known_city), conn: Connection = Depends(get
         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
                relationship_score, notes
         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT 5""", city=city)
-    caveats = list(CAVEATS) if top else [NO_RECOMMENDATIONS]
+    caveats = list(CAVEATS) if top else [_why_no_scores(conn, t, city)]
     return {"city": detail, "recommendations_available": bool(top), "top_plants": top,
             "companions": companions, "caveats": caveats}
