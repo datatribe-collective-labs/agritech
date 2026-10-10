@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { cityHref, countryName, frostLabel } from "@/lib/format";
+import { groupByContinent, type Continent } from "@/lib/continents";
+import { cityHref, countryName } from "@/lib/format";
 import type { CitySummary } from "@/lib/types";
 
 const LAST_CITY = "planting.lastCity";
 
-/** The home screen: headline, search box and the city cards. Search runs in the browser, so it is instant. */
+/**
+ * The home screen: headline, search box and the cities, folded under their continents.
+ * A continent opens when you click it and closes when you click it again. Typing in the search
+ * box opens every continent that has a match. Search runs in the browser, so it is instant.
+ */
 export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.ReactNode }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -23,6 +28,23 @@ export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.
     return q ? cities.filter((c) => `${c.city} ${countryName(c.country)}`.toLowerCase().includes(q)) : cities;
   }, [cities, query]);
   const again = cities.find((c) => c.city === last);
+
+  const groups = useMemo(() => groupByContinent(shown), [shown]);
+  const [open, setOpen] = useState<Set<Continent>>(new Set());
+  const searching = query.trim() !== "";
+
+  // Open the continent of the city you looked at last time, so "back to my city" is one click.
+  useEffect(() => {
+    const home = again && groupByContinent([again])[0]?.continent;
+    if (home) setOpen((now) => new Set(now).add(home));
+  }, [again]);
+
+  const toggle = (continent: Continent) =>
+    setOpen((now) => {
+      const next = new Set(now);
+      if (!next.delete(continent)) next.add(continent);
+      return next;
+    });
 
   return (
     <>
@@ -42,19 +64,52 @@ export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.
           {again && <p className="again">Last time: <Link href={cityHref(again.city)}>{again.city}</Link></p>}
         </div>
       </section>
-      <section aria-label="Cities">
-        <div className="city-grid">
-          {shown.map((c) => (
-            <Link key={c.city} className={`city-card ${c.has_recommendations ? "" : "is-quiet"}`} href={cityHref(c.city)}>
-              <span className="city-name">{c.city}</span>
-              <span className="city-country">{countryName(c.country)}</span>
-              <span className="city-meta">{frostLabel(c.frost_zone)}{c.has_recommendations ? "" : " · no crop advice yet"}</span>
-            </Link>
-          ))}
-        </div>
-        {shown.length === 0 && (
+      <section aria-label="Cities by continent" className="continents">
+        {groups.map((group, index) => {
+          const isOpen = searching || open.has(group.continent);
+          const id = `continent-${index}`;
+          return (
+            <div key={group.continent} className={`continent ${isOpen ? "is-open" : ""}`} data-continent={group.continent}>
+              <h2 className="continent-head">
+                <button type="button" aria-expanded={isOpen} aria-controls={id} onClick={() => toggle(group.continent)}>
+                  <span className="continent-badge" aria-hidden="true">{group.cityCount}</span>
+                  <span className="continent-label">
+                    <span className="continent-name">{group.continent}</span>
+                    <span className="continent-count">
+                      {group.countries.length} {group.countries.length === 1 ? "country" : "countries"}
+                    </span>
+                  </span>
+                  <span className="chevron" aria-hidden="true" />
+                </button>
+              </h2>
+              <div id={id} className="continent-body" role="region" aria-label={`Cities in ${group.continent}`}>
+                <div className="continent-inner" inert={!isOpen}>
+                  <div className="continent-content">
+                    {group.countries.map((country, i) => (
+                      <div key={country.code} className="country" style={{ "--i": i } as React.CSSProperties}>
+                        <h3>{country.name}</h3>
+                        <ul className="city-pills">
+                          {country.cities.map((c) => (
+                            <li key={c.city}>
+                              <Link className={`city-pill ${c.has_recommendations ? "" : "is-quiet"}`} href={cityHref(c.city)}>
+                                {c.city}
+                                {!c.has_recommendations && <span className="sr-only"> (no crop advice yet)</span>}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {groups.length === 0 && (
           <p className="empty" role="status">No city matches that search. Check the spelling, or clear the search to see all {cities.length} cities.</p>
         )}
+        <p className="legend small muted">Dashed cities have no crop advice yet.</p>
       </section>
     </>
   );

@@ -117,19 +117,62 @@ a:hover { color: var(--leaf); }
 .search input:focus { outline: none; border-color: var(--leaf); box-shadow: 0 0 0 4px color-mix(in srgb, var(--leaf) 22%, transparent); }
 .again { margin-top: 14px; color: var(--ink-soft); }
 
-/* City grid */
+/* Continents: each one folds open to show its countries and cities */
 .hero + section { padding-top: 4px; }
-.city-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 12px; margin-top: 28px; }
-.city-card {
-  display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; background: var(--paper); border: 1.5px solid var(--line);
-  border-radius: var(--radius); text-decoration: none; color: var(--ink); min-height: 96px;
-  transition: transform .2s var(--ease), border-color .2s, box-shadow .2s;
+.continents { display: grid; gap: 12px; margin-top: 28px; }
+.continent {
+  --accent: var(--leaf); --accent-tint: var(--leaf-tint);
+  background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--radius);
+  transition: border-color .3s, box-shadow .4s var(--ease);
 }
-.city-card:hover { transform: translateY(-3px); border-color: var(--leaf); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--leaf-deep) 60%, transparent); }
-.city-name { font: 650 1.25rem var(--display); letter-spacing: -.01em; }
-.city-country { color: var(--ink-soft); }
-.city-meta { margin-top: auto; font-size: .88rem; color: var(--ink-soft); padding-top: 8px; }
-.city-card.is-quiet { background: transparent; border-style: dashed; }
+.continent[data-continent="Africa"] { --accent: var(--heat); --accent-tint: var(--heat-tint); }
+.continent[data-continent="Asia"] { --accent: var(--frost); --accent-tint: var(--frost-tint); }
+.continent[data-continent="Europe"] { --accent: var(--rain); --accent-tint: var(--rain-tint); }
+.continent[data-continent="South America"] { --accent: #8a6d12; --accent-tint: #f4ebc8; }
+.continent[data-continent="Oceania"] { --accent: var(--soil); --accent-tint: var(--soil-tint); }
+.continent.is-open { border-color: var(--accent); box-shadow: 0 14px 30px -20px color-mix(in srgb, var(--accent) 70%, transparent); }
+.continent-head { margin: 0; font: inherit; }
+.continent-head button {
+  display: flex; align-items: center; gap: 16px; width: 100%; padding: 16px 18px; min-height: 72px; text-align: left;
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.continent-head button:hover .continent-badge { transform: scale(1.08) rotate(-4deg); }
+.continent-badge {
+  display: grid; place-items: center; flex: none; width: 46px; height: 46px; border-radius: 14px;
+  font: 700 1.15rem var(--display); color: var(--accent); background: var(--accent-tint);
+  transition: transform .35s var(--ease), background .3s, color .3s;
+}
+.is-open .continent-badge { background: var(--accent); color: #fff; }
+.continent-label { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.continent-name { font: 650 1.35rem var(--display); letter-spacing: -.01em; }
+.continent-count { color: var(--ink-soft); font-size: .92rem; }
+.chevron {
+  flex: none; width: 11px; height: 11px; margin-right: 6px; border-right: 2.5px solid var(--ink-soft); border-bottom: 2.5px solid var(--ink-soft);
+  transform: translateY(-3px) rotate(45deg); transition: transform .45s var(--ease), border-color .3s;
+}
+.is-open .chevron { transform: translateY(3px) rotate(225deg); border-color: var(--accent); }
+
+/* The fold: the row grows from 0 to its natural height, then the countries rise in one after another */
+.continent-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s var(--ease); }
+.is-open > .continent-body { grid-template-rows: 1fr; }
+.continent-inner { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s .5s; }
+.is-open .continent-inner { visibility: visible; transition-delay: 0s; }
+.continent-content { display: grid; gap: 18px; padding: 4px 18px 22px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.country { opacity: 0; transform: translateY(12px); transition: opacity .2s, transform .2s; }
+.is-open .country { opacity: 1; transform: none; transition: opacity .45s var(--ease), transform .5s var(--ease); transition-delay: calc(var(--i, 0) * 60ms + 140ms); }
+.country h3 { margin: 0 0 8px; font: 650 .8rem var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
+.city-pills { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.city-pill {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border-radius: 999px; text-decoration: none;
+  font: 600 1.02rem var(--body); color: var(--ink); background: var(--chalk); border: 1.5px solid var(--line);
+  transition: transform .2s var(--ease), background .2s, border-color .2s, color .2s;
+}
+.city-pill:hover { transform: translateY(-2px); background: var(--accent); border-color: var(--accent); color: #fff; }
+.city-pill.is-quiet { background: transparent; border-style: dashed; }
+.legend { margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .continent-body, .continent-inner, .country, .chevron, .continent-badge { transition-duration: .01s !important; transition-delay: 0s !important; }
+}
 .empty, .empty-inline { color: var(--ink-soft); margin-top: 24px; }
 
 /* Page heads and panels */
