@@ -1,0 +1,38 @@
+{
+  "rows": 1886,
+  "cities": 46,
+  "share_recorded": 0.166,
+  "top_n": 5,
+  "random_top_n_hit_rate": 0.166,
+  "model": {
+    "roc_auc": 0.673,
+    "average_precision": 0.26,
+    "top_n_hit_rate": 0.274,
+    "mean_within_city_auc": 0.673
+  },
+  "popularity_baseline": {
+    "roc_auc": 0.585,
+    "average_precision": 0.214,
+    "top_n_hit_rate": 0.261,
+    "mean_within_city_auc": 0.575
+  },
+  "trait_fit_baseline": {
+    "roc_auc": 0.581,
+    "average_precision": 0.195,
+    "top_n_hit_rate": 0.209,
+    "mean_within_city_auc": 0.607
+  },
+  "best_baseline": "popularity_baseline",
+  "model_beats_best_baseline_by_auc": 0.088,
+  "gain_95_percent_range": [
+    0.037,
+    0.136
+  ],
+  "verdict": "The model beats the best simple baseline by 0.088 AUC (95% range 0.037 to 0.136), and the gain holds when cities are resampled.",
+  "trained_at": "2026-10-11T09:00:36",
+  "run_id": "2026-10-11_09-00-36-785",
+  "status": "accepted",
+  "rejected_because": [],
+  "warnings": [],
+  "data_fingerprint": "9089ccb4046a296b"
+}
