@@ -1,0 +1,112 @@
+# Automatic checks (Continuous Integration)
+# ------------------------------------------
+# GitHub runs these checks on every push to main and on every pull request.
+# A green tick means: the Python code and the model pipeline pass their tests,
+# the website builds and passes its tests, and the dbt project is valid.
+#
+# None of these checks needs the production database or any password. Everything
+# that needs real data (dbt build, model training) still runs on the server.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only access is all these checks need.
+permissions:
+  contents: read
+
+# If a newer commit arrives while an older run is still going, stop the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: Python tests (scripts, API, model pipeline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            ml/requirements-ml.txt
+            api/requirements.txt
+
+      - name: Install the packages the tests use
+        run: pip install -r ml/requirements-ml.txt -r api/requirements.txt pytest requests python-dotenv
+
+      # tests/test_db.py is a manual database inventory script, not a test:
+      # it connects to a live database, so it is skipped here.
+      - name: Run the tests
+        run: python -m pytest tests ml/tests --ignore=tests/test_db.py -q
+
+  website:
+    name: Website (tests, type check, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install website packages
+        run: npm ci
+
+      - name: Run the website tests
+        run: npm test
+
+      - name: Check the TypeScript types
+        run: npm run lint
+
+      - name: Build the website
+        run: npm run build
+
+  dbt-project:
+    name: dbt project is valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt
+        run: pip install dbt-core==1.7.19 dbt-postgres==1.7.19
+
+      # "dbt parse" reads every model, test and macro and checks they fit together,
+      # without connecting to a database. dbt still wants a connection profile to
+      # exist, so we give it a placeholder one (no real host, no real password).
+      - name: Create a placeholder connection profile
+        run: |
+          mkdir -p "$RUNNER_TEMP/dbt-profile"
+          cat > "$RUNNER_TEMP/dbt-profile/profiles.yml" <<'PROFILE'
+          agritech:
+            target: ci
+            outputs:
+              ci:
+                type: postgres
+                host: localhost
+                port: 5432
+                user: ci
+                password: ci
+                dbname: ci
+                schema: public
+                threads: 1
+          PROFILE
+
+      - name: Check the dbt project
+        working-directory: dbt
+        run: dbt parse --profiles-dir "$RUNNER_TEMP/dbt-profile"

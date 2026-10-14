@@ -1,5 +1,7 @@
 # RELATE | Relational Planting Technologies
 
+[![CI](https://github.com/datatribe-collective-labs/agritech/actions/workflows/ci.yml/badge.svg)](https://github.com/datatribe-collective-labs/agritech/actions/workflows/ci.yml)
+
 ## Values & Governance
 
 This project operates from a place that couples localised market trade with human and ecological stewardship:
