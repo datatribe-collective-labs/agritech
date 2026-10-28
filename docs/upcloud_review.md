@@ -8,7 +8,7 @@ We recently moved a production data and machine learning stack onto UpCloud. Our
 
 We design and build the parts of a product that people actually use, and we judge whether a platform is usable. Several of us also build full-stack applications with AI tools, often called vibe coders, without back-end or infrastructure security training. When we struggle with a platform, that tells you about the platform’s usability, not about our skill. We know enough to see how much we don’t know.
 
-Our earlier experience with AWS, MongoDB and Supabase didn’t fit the way we work. After adapting to one platform after another, some of us burned out and stopped trying. The platforms aren’t wrong. The steps between where we are and how cloud infrastructure works were missing. Three things got in the way:
+Our earlier experience with AWS, MongoDB and Supabase didn’t fit the way we work. After adapting to one platform after another, our capacity could not make up for what our capability lacked. The platforms aren’t wrong. The steps between where we are and how cloud infrastructure works were missing. Three things got in the way:
 
 - **Usage-based pricing.** We couldn’t forecast what a project would cost before it launched, which is stressful on a fixed budget.
 - **Time limits on unused projects.** They make sense for the provider, but re-spinning an environment each time we came back broke our flow and slowed down quick iteration.
