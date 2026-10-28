@@ -1,22 +1,22 @@
 # Trying UpCloud as Cloud Newcomers: What Worked and What Slowed Us Down
 
-*A team review of onboarding, deployment and day-to-day reliability, written from the point of view of people building with AI.*
+*A review from a mixed team of front-end and interface builders and back-end engineers, on onboarding, deployment and day-to-day reliability.*
 
-We recently moved a production data and machine learning stack onto UpCloud. This post covers two things: how the deployment went, and what we think UpCloud could do for a group of builders it isn’t reaching yet.
+We recently moved a production data and machine learning stack onto UpCloud. Our team brings two kinds of expertise: front-end and interface work, and back-end and data engineering. Both shaped this review, and a cloud product only works for people when both are done well.
 
-## Who we are in this story
+## From the front end and interface team
 
-A fast-growing group of people now build full-stack applications with AI tools, without a background in backend engineering or infrastructure security. They’re often called vibe coders, and we count ourselves among them. We know enough to see how much we don’t know.
+We design and build the parts of a product that people actually use, and we judge whether a platform is usable. Several of us also build full-stack applications with AI tools, often called vibe coders, without back-end or infrastructure security training. When we struggle with a platform, that tells you about the platform’s usability, not about our skill. We know enough to see how much we don’t know.
 
-For builders like us, AWS, MongoDB and Supabase didn’t fit the way we work. After adapting to one platform after another, some of us burned out and stopped trying. The platforms aren’t wrong. The steps between where we are and how cloud infrastructure works were missing. Three things got in the way:
+Our earlier experience with AWS, MongoDB and Supabase didn’t fit the way we work. After adapting to one platform after another, some of us burned out and stopped trying. The platforms aren’t wrong. The steps between where we are and how cloud infrastructure works were missing. Three things got in the way:
 
 - **Usage-based pricing.** We couldn’t forecast what a project would cost before it launched, which is stressful on a fixed budget.
 - **Time limits on unused projects.** They make sense for the provider, but re-spinning an environment each time we came back broke our flow and slowed down quick iteration.
 - **Unknown unknowns.** We worried about silent security misconfigurations and architecture mistakes we wouldn’t have the experience to spot. Knowing a little can freeze you more than knowing nothing.
 
-## What we deployed
+## From the back end and data team
 
-We run a managed PostgreSQL database and a single cloud server (2 CPUs, 8 GB RAM) in FI-HEL2. The server runs the whole stack as systemd services: Airflow, dbt, weekly machine learning retraining, and the API.
+We set up and run the stack, and our notes cover what we deployed, what worked and where we hesitated. We run a managed PostgreSQL database and a single cloud server (2 CPUs, 8 GB RAM) in FI-HEL2. The server runs the whole stack as systemd services: Airflow, dbt, weekly machine learning retraining, and the API.
 
 ## What worked
 
@@ -35,7 +35,7 @@ We run a managed PostgreSQL database and a single cloud server (2 CPUs, 8 GB RAM
 
 ## What we’d like to see
 
-Our main feedback is about onboarding more than infrastructure. The infrastructure has done its job. What would help people like us:
+Our main feedback is about onboarding more than infrastructure. That makes it a front-end problem as much as a back-end one: most people won’t use cloud infrastructure unless the interface, documentation and first steps make it usable. The infrastructure has done its job. What would help newcomers at any level of experience:
 
 - Short inline notes wherever a wait or a delay is normal.
 - Clear guidance on tool and version compatibility.
