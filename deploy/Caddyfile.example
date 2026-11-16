@@ -14,3 +14,12 @@ app.94-237-15-238.sslip.io {
     }
     reverse_proxy 127.0.0.1:3000
 }
+
+# The AI assistant: add this INSIDE the API site block above (94-237-15-238.sslip.io { ... }),
+# before the catch-all reverse_proxy, so only /assistant/* goes to the gateway.
+#     handle /assistant/* {
+#         reverse_proxy 127.0.0.1:8001
+#     }
+#     handle {
+#         reverse_proxy 127.0.0.1:8000
+#     }
