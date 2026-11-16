@@ -307,3 +307,47 @@ a:hover { color: var(--leaf); }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
   .stem { stroke-dashoffset: 0; } .leaf { transform: scale(1); }
 }
+
+/* "Let's discuss more": the floating button and the chat panel */
+/* The button stays in the bottom corner while the page scrolls. */
+.assistant-open {
+  position: fixed; right: var(--gutter); bottom: 20px; z-index: 25; min-height: 48px; padding: 10px 22px;
+  border-radius: 999px; border: 0; background: var(--leaf-deep); color: #fff; font: 700 1rem var(--body);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25); cursor: pointer;
+}
+.assistant-open:hover { background: var(--leaf); }
+/* On a phone the panel is a sheet from the bottom, on larger screens a card in the corner. */
+.assistant-panel {
+  position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; max-height: 85vh; display: flex; flex-direction: column;
+  gap: 10px; padding: 16px var(--gutter) 18px; background: var(--paper); border-top: 1.5px solid var(--line);
+  border-radius: calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+}
+@media (min-width: 720px) {
+  .assistant-panel { left: auto; right: 24px; bottom: 24px; width: 420px; max-height: 80vh; border: 1.5px solid var(--line); border-radius: calc(var(--radius) + 4px); }
+}
+/* Title row. */
+.assistant-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assistant-head h2 { font-size: 1.25rem; }
+.assistant-head p { margin: 2px 0 0; }
+.assistant-close { border: 0; background: transparent; color: var(--ink); font-size: 1.8rem; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
+/* The AI notice. */
+.assistant-notice { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--leaf-tint); color: var(--leaf-deep); }
+/* Message list scrolls inside the panel. */
+.assistant-messages { flex: 1; min-height: 80px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.assistant-msg { margin: 0; padding: 9px 13px; border-radius: 14px; max-width: 88%; }
+.assistant-msg.farmer { align-self: flex-end; background: var(--leaf-deep); color: #fff; }
+.assistant-msg.assistant { align-self: flex-start; background: var(--chalk); border: 1.5px solid var(--line); }
+.assistant-problem { margin: 0; color: var(--warn); font-weight: 600; }
+/* Tappable questions wrap onto several lines. */
+.assistant-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-chip {
+  min-height: 40px; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--leaf); background: transparent;
+  color: var(--leaf-deep); font: 600 .92rem var(--body); cursor: pointer; text-align: left;
+}
+.assistant-chip:hover:not(:disabled) { background: var(--leaf-tint); }
+.assistant-chip:disabled { opacity: .5; cursor: default; }
+/* Typing box and Send button side by side. */
+.assistant-form { display: flex; gap: 8px; }
+.assistant-input { flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--line); background: var(--chalk); color: var(--ink); font: inherit; }
+/* Small text button to delete the chat. */
+.assistant-forget { align-self: flex-start; border: 0; background: transparent; color: var(--ink-soft); text-decoration: underline; font: inherit; font-size: .9rem; padding: 6px 0; cursor: pointer; }

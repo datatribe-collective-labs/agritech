@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AskAssistant } from "@/components/AskAssistant";
 import { CropList } from "@/components/CropList";
 import { Problem } from "@/components/Problem";
 import { RememberCity } from "@/components/RememberCity";
@@ -68,6 +69,8 @@ export default async function CityPage({ params }: Props) {
       )}
 
       <YearStrip months={months} />
+
+      <AskAssistant city={city.city} about={`Crops for ${city.city}`} />
     </>
   );
 }

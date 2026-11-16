@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AskAssistant } from "@/components/AskAssistant";
 import { CompanionCard, SourceLine } from "@/components/Parts";
 import { Problem } from "@/components/Problem";
 import { RememberCity } from "@/components/RememberCity";
@@ -112,6 +113,8 @@ export default async function PlantPage({ params }: Props) {
         {t.notes && <p className="muted">{t.notes}</p>}
         <SourceLine text={t.trait_source} url={t.source_url} />
       </section>
+
+      <AskAssistant city={city.city} species={plant.species} about={`${own} in ${city.city}`} />
     </>
   );
 }

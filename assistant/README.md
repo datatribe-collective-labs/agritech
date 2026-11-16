@@ -27,6 +27,10 @@ The assistant holds **no database credentials**. It can only call the existing r
 | Kill switch and daily token budget | `governance/kill_switch.py` |
 | Load testing | `docs/assistant/LOAD_TEST.md` |
 
+## On the website
+
+The "Let's discuss more" button (`frontend/components/AskAssistant.tsx`) starts a chat from the city or crop page, offers tappable questions, and also allows typing. The browser sends only the city and crop names; the server rebuilds the result card itself.
+
 ## Run it
 
     pip install -r api/requirements.txt -r assistant/requirements.txt
