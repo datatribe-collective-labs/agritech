@@ -1,0 +1,15 @@
+# systemd unit for the AI assistant gateway. It needs NO database credentials.
+[Unit]
+Description=Planting Intelligence assistant
+After=network-online.target planting-api.service
+
+[Service]
+# Model service address and secrets live in their own file (never in git).
+EnvironmentFile=/root/assistant.env
+Environment=ASSISTANT_API_BASE_URL=http://127.0.0.1:8000
+WorkingDirectory=/root/agritech
+ExecStart=/root/agritech/venvs/api/bin/uvicorn assistant.gateway.app:create_app --factory --host 127.0.0.1 --port 8001
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

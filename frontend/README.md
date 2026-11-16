@@ -15,6 +15,17 @@ Pages are fetched on the server and kept for five minutes, so a new model run sh
 |---|---|---|
 | `API_URL` | where the API lives, as seen from the server running the website | `https://94-237-15-238.sslip.io` |
 
+## "Let's discuss more" (AI chat)
+
+A button on the city page and the crop page opens a chat panel. Farmers tap a suggested question or type their own; the assistant only explains the result on that page (see `assistant/README.md`). This is the one part where the browser talks to a server directly: it calls the assistant gateway, never the API.
+
+    components/AskAssistant.tsx   the button and the panel (runs in the browser)
+    lib/assistant.ts              calls to the gateway, the suggested questions, the friendly error messages
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `NEXT_PUBLIC_ASSISTANT_URL` | where the assistant gateway is, as seen from the farmer's browser (set before `npm run build`) | `https://94-237-15-238.sslip.io/assistant` |
+
 ## Run it on your laptop
 
     cd frontend
