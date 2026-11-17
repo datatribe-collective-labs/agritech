@@ -1,0 +1,330 @@
+From ba54593614ddd7a40b3af52577462c57f14618ae Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 17:07:12 +0300
+Subject: [PATCH] Frontend: fold the home screen's cities under continent
+ dropdowns
+
+- Each continent opens and closes with a click; its countries and cities rise in one by one
+- Search opens every continent with a match; the last city's continent opens on return
+- Keyboard and screen-reader friendly (aria-expanded, hidden content is not focusable)
+- lib/continents.ts groups cities; a test fails if a fetched country has no continent
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ frontend/app/globals.css           | 65 ++++++++++++++++++++----
+ frontend/components/CityPicker.tsx | 81 +++++++++++++++++++++++++-----
+ frontend/lib/continents.test.ts    | 46 +++++++++++++++++
+ frontend/lib/continents.ts         | 57 +++++++++++++++++++++
+ 4 files changed, 225 insertions(+), 24 deletions(-)
+ create mode 100644 frontend/lib/continents.test.ts
+ create mode 100644 frontend/lib/continents.ts
+
+diff --git a/frontend/app/globals.css b/frontend/app/globals.css
+index 366ecc2..aa5e31a 100644
+--- a/frontend/app/globals.css
++++ b/frontend/app/globals.css
+@@ -117,19 +117,62 @@ a:hover { color: var(--leaf); }
+ .search input:focus { outline: none; border-color: var(--leaf); box-shadow: 0 0 0 4px color-mix(in srgb, var(--leaf) 22%, transparent); }
+ .again { margin-top: 14px; color: var(--ink-soft); }
+ 
+-/* City grid */
++/* Continents: each one folds open to show its countries and cities */
+ .hero + section { padding-top: 4px; }
+-.city-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 12px; margin-top: 28px; }
+-.city-card {
+-  display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; background: var(--paper); border: 1.5px solid var(--line);
+-  border-radius: var(--radius); text-decoration: none; color: var(--ink); min-height: 96px;
+-  transition: transform .2s var(--ease), border-color .2s, box-shadow .2s;
++.continents { display: grid; gap: 12px; margin-top: 28px; }
++.continent {
++  --accent: var(--leaf); --accent-tint: var(--leaf-tint);
++  background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--radius);
++  transition: border-color .3s, box-shadow .4s var(--ease);
++}
++.continent[data-continent="Africa"] { --accent: var(--heat); --accent-tint: var(--heat-tint); }
++.continent[data-continent="Asia"] { --accent: var(--frost); --accent-tint: var(--frost-tint); }
++.continent[data-continent="Europe"] { --accent: var(--rain); --accent-tint: var(--rain-tint); }
++.continent[data-continent="South America"] { --accent: #8a6d12; --accent-tint: #f4ebc8; }
++.continent[data-continent="Oceania"] { --accent: var(--soil); --accent-tint: var(--soil-tint); }
++.continent.is-open { border-color: var(--accent); box-shadow: 0 14px 30px -20px color-mix(in srgb, var(--accent) 70%, transparent); }
++.continent-head { margin: 0; font: inherit; }
++.continent-head button {
++  display: flex; align-items: center; gap: 16px; width: 100%; padding: 16px 18px; min-height: 72px; text-align: left;
++  font: inherit; color: var(--ink); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
++}
++.continent-head button:hover .continent-badge { transform: scale(1.08) rotate(-4deg); }
++.continent-badge {
++  display: grid; place-items: center; flex: none; width: 46px; height: 46px; border-radius: 14px;
++  font: 700 1.15rem var(--display); color: var(--accent); background: var(--accent-tint);
++  transition: transform .35s var(--ease), background .3s, color .3s;
++}
++.is-open .continent-badge { background: var(--accent); color: #fff; }
++.continent-label { display: grid; gap: 1px; flex: 1; min-width: 0; }
++.continent-name { font: 650 1.35rem var(--display); letter-spacing: -.01em; }
++.continent-count { color: var(--ink-soft); font-size: .92rem; }
++.chevron {
++  flex: none; width: 11px; height: 11px; margin-right: 6px; border-right: 2.5px solid var(--ink-soft); border-bottom: 2.5px solid var(--ink-soft);
++  transform: translateY(-3px) rotate(45deg); transition: transform .45s var(--ease), border-color .3s;
++}
++.is-open .chevron { transform: translateY(3px) rotate(225deg); border-color: var(--accent); }
++
++/* The fold: the row grows from 0 to its natural height, then the countries rise in one after another */
++.continent-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s var(--ease); }
++.is-open > .continent-body { grid-template-rows: 1fr; }
++.continent-inner { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s .5s; }
++.is-open .continent-inner { visibility: visible; transition-delay: 0s; }
++.continent-content { display: grid; gap: 18px; padding: 4px 18px 22px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
++.country { opacity: 0; transform: translateY(12px); transition: opacity .2s, transform .2s; }
++.is-open .country { opacity: 1; transform: none; transition: opacity .45s var(--ease), transform .5s var(--ease); transition-delay: calc(var(--i, 0) * 60ms + 140ms); }
++.country h3 { margin: 0 0 8px; font: 650 .8rem var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
++.city-pills { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
++.city-pill {
++  display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border-radius: 999px; text-decoration: none;
++  font: 600 1.02rem var(--body); color: var(--ink); background: var(--chalk); border: 1.5px solid var(--line);
++  transition: transform .2s var(--ease), background .2s, border-color .2s, color .2s;
++}
++.city-pill:hover { transform: translateY(-2px); background: var(--accent); border-color: var(--accent); color: #fff; }
++.city-pill.is-quiet { background: transparent; border-style: dashed; }
++.legend { margin-top: 4px; }
++@media (prefers-reduced-motion: reduce) {
++  .continent-body, .continent-inner, .country, .chevron, .continent-badge { transition-duration: .01s !important; transition-delay: 0s !important; }
+ }
+-.city-card:hover { transform: translateY(-3px); border-color: var(--leaf); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--leaf-deep) 60%, transparent); }
+-.city-name { font: 650 1.25rem var(--display); letter-spacing: -.01em; }
+-.city-country { color: var(--ink-soft); }
+-.city-meta { margin-top: auto; font-size: .88rem; color: var(--ink-soft); padding-top: 8px; }
+-.city-card.is-quiet { background: transparent; border-style: dashed; }
+ .empty, .empty-inline { color: var(--ink-soft); margin-top: 24px; }
+ 
+ /* Page heads and panels */
+diff --git a/frontend/components/CityPicker.tsx b/frontend/components/CityPicker.tsx
+index f5512e1..f176e54 100644
+--- a/frontend/components/CityPicker.tsx
++++ b/frontend/components/CityPicker.tsx
+@@ -3,12 +3,17 @@
+ import Link from "next/link";
+ import { useRouter } from "next/navigation";
+ import { useEffect, useMemo, useState } from "react";
+-import { cityHref, countryName, frostLabel } from "@/lib/format";
++import { groupByContinent, type Continent } from "@/lib/continents";
++import { cityHref, countryName } from "@/lib/format";
+ import type { CitySummary } from "@/lib/types";
+ 
+ const LAST_CITY = "planting.lastCity";
+ 
+-/** The home screen: headline, search box and the city cards. Search runs in the browser, so it is instant. */
++/**
++ * The home screen: headline, search box and the cities, folded under their continents.
++ * A continent opens when you click it and closes when you click it again. Typing in the search
++ * box opens every continent that has a match. Search runs in the browser, so it is instant.
++ */
+ export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.ReactNode }) {
+   const router = useRouter();
+   const [query, setQuery] = useState("");
+@@ -24,6 +29,23 @@ export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.
+   }, [cities, query]);
+   const again = cities.find((c) => c.city === last);
+ 
++  const groups = useMemo(() => groupByContinent(shown), [shown]);
++  const [open, setOpen] = useState<Set<Continent>>(new Set());
++  const searching = query.trim() !== "";
++
++  // Open the continent of the city you looked at last time, so "back to my city" is one click.
++  useEffect(() => {
++    const home = again && groupByContinent([again])[0]?.continent;
++    if (home) setOpen((now) => new Set(now).add(home));
++  }, [again]);
++
++  const toggle = (continent: Continent) =>
++    setOpen((now) => {
++      const next = new Set(now);
++      if (!next.delete(continent)) next.add(continent);
++      return next;
++    });
++
+   return (
+     <>
+       <section className="hero">
+@@ -42,19 +64,52 @@ export function CityPicker({ cities, art }: { cities: CitySummary[]; art: React.
+           {again && <p className="again">Last time: <Link href={cityHref(again.city)}>{again.city}</Link></p>}
+         </div>
+       </section>
+-      <section aria-label="Cities">
+-        <div className="city-grid">
+-          {shown.map((c) => (
+-            <Link key={c.city} className={`city-card ${c.has_recommendations ? "" : "is-quiet"}`} href={cityHref(c.city)}>
+-              <span className="city-name">{c.city}</span>
+-              <span className="city-country">{countryName(c.country)}</span>
+-              <span className="city-meta">{frostLabel(c.frost_zone)}{c.has_recommendations ? "" : " · no crop advice yet"}</span>
+-            </Link>
+-          ))}
+-        </div>
+-        {shown.length === 0 && (
++      <section aria-label="Cities by continent" className="continents">
++        {groups.map((group, index) => {
++          const isOpen = searching || open.has(group.continent);
++          const id = `continent-${index}`;
++          return (
++            <div key={group.continent} className={`continent ${isOpen ? "is-open" : ""}`} data-continent={group.continent}>
++              <h2 className="continent-head">
++                <button type="button" aria-expanded={isOpen} aria-controls={id} onClick={() => toggle(group.continent)}>
++                  <span className="continent-badge" aria-hidden="true">{group.cityCount}</span>
++                  <span className="continent-label">
++                    <span className="continent-name">{group.continent}</span>
++                    <span className="continent-count">
++                      {group.countries.length} {group.countries.length === 1 ? "country" : "countries"}
++                    </span>
++                  </span>
++                  <span className="chevron" aria-hidden="true" />
++                </button>
++              </h2>
++              <div id={id} className="continent-body" role="region" aria-label={`Cities in ${group.continent}`}>
++                <div className="continent-inner" inert={!isOpen}>
++                  <div className="continent-content">
++                    {group.countries.map((country, i) => (
++                      <div key={country.code} className="country" style={{ "--i": i } as React.CSSProperties}>
++                        <h3>{country.name}</h3>
++                        <ul className="city-pills">
++                          {country.cities.map((c) => (
++                            <li key={c.city}>
++                              <Link className={`city-pill ${c.has_recommendations ? "" : "is-quiet"}`} href={cityHref(c.city)}>
++                                {c.city}
++                                {!c.has_recommendations && <span className="sr-only"> (no crop advice yet)</span>}
++                              </Link>
++                            </li>
++                          ))}
++                        </ul>
++                      </div>
++                    ))}
++                  </div>
++                </div>
++              </div>
++            </div>
++          );
++        })}
++        {groups.length === 0 && (
+           <p className="empty" role="status">No city matches that search. Check the spelling, or clear the search to see all {cities.length} cities.</p>
+         )}
++        <p className="legend small muted">Dashed cities have no crop advice yet.</p>
+       </section>
+     </>
+   );
+diff --git a/frontend/lib/continents.test.ts b/frontend/lib/continents.test.ts
+new file mode 100644
+index 0000000..0a04f50
+--- /dev/null
++++ b/frontend/lib/continents.test.ts
+@@ -0,0 +1,46 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++import { continentOf, groupByContinent } from "./continents";
++import type { CitySummary } from "./types";
++
++const city = (name: string, country: string | null, has = true): CitySummary => ({
++  city: name, country, latitude: null, longitude: null, frost_zone: null, soil_ph: null, has_recommendations: has,
++});
++
++describe("grouping cities by continent", () => {
++  const groups = groupByContinent([
++    city("Nairobi", "KE"), city("Accra", "GH"), city("Obuasi", "GH"), city("Paris", "FR"),
++    city("Mexico City", "MX"), city("Atlantis", "ZZ"), city("Nowhere", null),
++  ]);
++
++  it("lists continents in a fixed order and leaves empty ones out", () => {
++    expect(groups.map((g) => g.continent)).toEqual(["Africa", "Europe", "North America", "Other places"]);
++  });
++
++  it("sorts countries and cities A to Z and counts cities", () => {
++    const africa = groups[0];
++    expect(africa.countries.map((c) => c.name)).toEqual(["Ghana", "Kenya"]);
++    expect(africa.countries[0].cities.map((c) => c.city)).toEqual(["Accra", "Obuasi"]);
++    expect(africa.cityCount).toBe(3);
++  });
++
++  it("puts unknown or missing countries under Other places instead of dropping them", () => {
++    expect(groups[3].countries.flatMap((c) => c.cities.map((x) => x.city)).sort()).toEqual(["Atlantis", "Nowhere"]);
++    expect(continentOf(undefined)).toBe("Other places");
++  });
++
++  it("accepts lower-case codes", () => {
++    expect(continentOf("ke")).toBe("Africa");
++  });
++});
++
++describe("the city list in the repository", () => {
++  it("has a continent for every country the pipeline fetches", () => {
++    let source = "";
++    try { source = readFileSync(join(__dirname, "../../scripts/shared_locations.py"), "utf8"); } catch { return; } // frontend built on its own
++    const codes = [...source.matchAll(/"Country":\s*"([A-Z]{2})"/g)].map((m) => m[1]);
++    expect(codes.length).toBeGreaterThan(40);
++    expect(codes.filter((code) => continentOf(code) === "Other places")).toEqual([]);
++  });
++});
+diff --git a/frontend/lib/continents.ts b/frontend/lib/continents.ts
+new file mode 100644
+index 0000000..4368ba5
+--- /dev/null
++++ b/frontend/lib/continents.ts
+@@ -0,0 +1,57 @@
++// Groups the cities by continent, then by country, for the home screen.
++import { countryName } from "./format";
++import type { CitySummary } from "./types";
++
++export const CONTINENTS = ["Africa", "Asia", "Europe", "North America", "South America", "Oceania"] as const;
++export type Continent = (typeof CONTINENTS)[number] | "Other places";
++
++// Country code -> continent. A country that is not listed here appears under "Other places"
++// (and the test in continents.test.ts fails), so a new city is never silently lost.
++const CONTINENT_OF: Record<string, Continent> = {
++  // Africa
++  DZ: "Africa", EG: "Africa", ET: "Africa", GH: "Africa", KE: "Africa", MA: "Africa", NG: "Africa", RW: "Africa",
++  SN: "Africa", TZ: "Africa", UG: "Africa", ZA: "Africa", ZM: "Africa", ZW: "Africa", CI: "Africa", CM: "Africa",
++  // Asia (Turkey, Iran and Jordan are counted here)
++  BD: "Asia", CN: "Asia", ID: "Asia", IN: "Asia", IR: "Asia", JO: "Asia", JP: "Asia", KR: "Asia", KZ: "Asia",
++  MY: "Asia", NP: "Asia", PH: "Asia", PK: "Asia", TH: "Asia", TR: "Asia", UZ: "Asia", VN: "Asia", LK: "Asia",
++  // Europe
++  AT: "Europe", CZ: "Europe", DE: "Europe", DK: "Europe", ES: "Europe", FI: "Europe", FR: "Europe", HU: "Europe",
++  IT: "Europe", NO: "Europe", PL: "Europe", RO: "Europe", SE: "Europe", UA: "Europe", GB: "Europe", NL: "Europe",
++  PT: "Europe", GR: "Europe", IE: "Europe",
++  // North America (including Mexico)
++  CA: "North America", MX: "North America", US: "North America",
++  // South America
++  AR: "South America", BR: "South America", CL: "South America", CO: "South America", PE: "South America",
++  PY: "South America", UY: "South America", EC: "South America", BO: "South America",
++  // Oceania
++  AU: "Oceania", NZ: "Oceania",
++};
++
++export const continentOf = (code: string | null | undefined): Continent =>
++  (code && CONTINENT_OF[code.toUpperCase()]) || "Other places";
++
++export type CountryGroup = { code: string; name: string; cities: CitySummary[] };
++export type ContinentGroup = { continent: Continent; countries: CountryGroup[]; cityCount: number };
++
++/** Continents in a fixed order (empty ones left out), countries A to Z, cities A to Z. */
++export function groupByContinent(cities: CitySummary[]): ContinentGroup[] {
++  const byContinent = new Map<Continent, Map<string, CountryGroup>>();
++  for (const city of cities) {
++    const code = (city.country ?? "").toUpperCase();
++    const continent = continentOf(code);
++    const countries = byContinent.get(continent) ?? new Map<string, CountryGroup>();
++    const group = countries.get(code) ?? { code, name: countryName(code) || "Country not stated", cities: [] };
++    group.cities.push(city);
++    countries.set(code, group);
++    byContinent.set(continent, countries);
++  }
++  const order: Continent[] = [...CONTINENTS, "Other places"];
++  return order.flatMap((continent) => {
++    const countries = byContinent.get(continent);
++    if (!countries) return [];
++    const list = [...countries.values()]
++      .map((c) => ({ ...c, cities: [...c.cities].sort((a, b) => a.city.localeCompare(b.city)) }))
++      .sort((a, b) => a.name.localeCompare(b.name));
++    return [{ continent, countries: list, cityCount: list.reduce((n, c) => n + c.cities.length, 0) }];
++  });
++}
+-- 
+2.43.0
+

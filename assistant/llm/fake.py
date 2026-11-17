@@ -93,9 +93,15 @@ class RuleBasedFakeLLM(LLM):
             # First reason, or a fallback text.
             reason = (card.get("reasons") or ["no reason recorded"])[0]
             # One grounded sentence.
-            return (f"As an AI helper: {card['common_name']} scores {card['suitability_score']} in {card['city']} "
-                    # Rank and reason.
-                    f"(rank {card['rank_in_city']}). Main reason: {reason}.")
+            total = card.get("crops_ranked_in_city")
+            # "7 of 10" when known.
+            rank = f"{card['rank_in_city']} of {total}" if total else f"{card['rank_in_city']}"
+            # Score and rank first, then the main reason.
+            text = (f"As an AI helper: {card['common_name']} scores {card['suitability_score']} in {card['city']} "
+                    # Rank (with total) and the main reason.
+                    f"(rank {rank}). Main reason: {reason}.")
+            # Then each heads-up note in plain words.
+            return " ".join([text] + [f"Heads up: {n}" for n in card.get("heads_up") or []])
         # A ranked city list.
         plants = card.get("plants", [])
         # No crops to list.

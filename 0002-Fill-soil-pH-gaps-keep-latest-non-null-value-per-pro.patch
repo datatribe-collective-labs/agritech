@@ -1,0 +1,443 @@
+From ae8d4b6259c359242296680dd9882cf0d669101d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 7 Oct 2026 22:17:28 +0300
+Subject: [PATCH 2/2] Fill soil pH gaps: keep latest non-null value per
+ property, widen WoSIS search when a property is missing
+
+- stg_soil: one row per city; each soil property takes its most recent non-null value across fetches
+- fetch_soil: widen the search box when any property (e.g. pH) is missing, take each property from the closest box that has it
+- ml/utils/db: marts schema configurable via PLANTING_MARTS_SCHEMA
+- tests for the soil fetch widening and the schema setting
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ dbt/models/staging/stg_soil.sql |  52 ++++++++++++----
+ ml/tests/test_ml_pipelines.py   |  15 ++++-
+ ml/utils/db.py                  |  19 ++++--
+ scripts/fetch_soil.py           |  98 +++++++++++++++++++------------
+ tests/unit/test_fetch_soil.py   | 101 ++++++++++++++++++++++++++++++++
+ 5 files changed, 227 insertions(+), 58 deletions(-)
+ create mode 100644 tests/unit/test_fetch_soil.py
+
+diff --git a/dbt/models/staging/stg_soil.sql b/dbt/models/staging/stg_soil.sql
+index 3e0481c..3ba7551 100644
+--- a/dbt/models/staging/stg_soil.sql
++++ b/dbt/models/staging/stg_soil.sql
+@@ -1,11 +1,15 @@
+--- Soil per city, top layer (0-5 cm). Latest row per city.
++-- Soil per city, top layer (0-5 cm). One row per city.
+ -- Source: ISRIC WoSIS field-measured soil profiles. For each city the fetch script averages
+--- the profiles found within about 55 km (widened to about 220 km if none), weighted by
+--- distance. So these are estimates from nearby measurements, not the city's own soil.
+--- A property with no measurement in that area is left empty (for example pH for Berlin).
++-- the profiles found within about 55 km (widened to about 220 km when a property has no
++-- measurement), weighted by distance. So these are estimates from nearby measurements,
++-- not the city's own soil. A property with no measurement in that area stays empty.
+ -- The fetch script stores values scaled up; this model scales them back to everyday units:
+ --   clay/sand/silt: x10 -> %      pH: x10 -> pH units
+ --   organic carbon: x10 -> g/kg   nitrogen: x100 -> g/kg
++--
++-- The fetch runs repeatedly. For each property we use the most recent fetch that HAS a value:
++-- soil does not change between fetches, and a later fetch can come back without a pH that an
++-- earlier one found. Location and timestamp come from the latest fetch.
+ 
+ {{ config(materialized='view') }}
+ 
+@@ -18,7 +22,8 @@ WITH converted AS (
+         CAST(clay_0_5cm AS NUMERIC) / 10.0 AS clay_pct,
+         CAST(sand_0_5cm AS NUMERIC) / 10.0 AS sand_pct,
+         CAST(silt_0_5cm AS NUMERIC) / 10.0 AS silt_pct,
+-        CAST(phh2o_0_5cm AS NUMERIC) / 10.0 AS ph_raw,
++        CASE WHEN CAST(phh2o_0_5cm AS NUMERIC) / 10.0 BETWEEN 3.0 AND 10.0
++             THEN CAST(phh2o_0_5cm AS NUMERIC) / 10.0 END AS soil_ph,   -- outside 3-10 = bad reading
+         CAST(soc_0_5cm AS NUMERIC) / 10.0 AS organic_carbon_g_kg,
+         CAST(nitrogen_0_5cm AS NUMERIC) / 100.0 AS nitrogen_g_kg,
+         soil_data_source,
+@@ -26,6 +31,31 @@ WITH converted AS (
+         ROW_NUMBER() OVER (PARTITION BY city ORDER BY ingested_at DESC) AS row_num
+     FROM {{ source('planting_raw', 'soil') }}
+     WHERE latitude IS NOT NULL AND longitude IS NOT NULL
++),
++
++latest_value AS (
++    SELECT
++        city,
++        (ARRAY_AGG(clay_pct ORDER BY ingested_at DESC) FILTER (WHERE clay_pct IS NOT NULL))[1] AS clay_pct,
++        (ARRAY_AGG(sand_pct ORDER BY ingested_at DESC) FILTER (WHERE sand_pct IS NOT NULL))[1] AS sand_pct,
++        (ARRAY_AGG(silt_pct ORDER BY ingested_at DESC) FILTER (WHERE silt_pct IS NOT NULL))[1] AS silt_pct,
++        (ARRAY_AGG(soil_ph  ORDER BY ingested_at DESC) FILTER (WHERE soil_ph  IS NOT NULL))[1] AS soil_ph,
++        (ARRAY_AGG(organic_carbon_g_kg ORDER BY ingested_at DESC)
++            FILTER (WHERE organic_carbon_g_kg IS NOT NULL))[1] AS organic_carbon_g_kg,
++        (ARRAY_AGG(nitrogen_g_kg ORDER BY ingested_at DESC)
++            FILTER (WHERE nitrogen_g_kg IS NOT NULL))[1] AS nitrogen_g_kg
++    FROM converted
++    GROUP BY city
++),
++
++combined AS (
++    SELECT
++        c.city, c.country, c.latitude, c.longitude,
++        v.clay_pct, v.sand_pct, v.silt_pct, v.soil_ph, v.organic_carbon_g_kg, v.nitrogen_g_kg,
++        c.soil_data_source, c.ingested_at
++    FROM converted c
++    JOIN latest_value v ON v.city = c.city
++    WHERE c.row_num = 1
+ )
+ 
+ SELECT
+@@ -36,12 +66,9 @@ SELECT
+     ROUND(clay_pct, 2) AS clay_pct,
+     ROUND(sand_pct, 2) AS sand_pct,
+     ROUND(silt_pct, 2) AS silt_pct,
+-
+-    -- pH outside 3-10 is treated as a bad reading and left empty
+-    CASE WHEN ph_raw BETWEEN 3.0 AND 10.0 THEN ROUND(ph_raw, 1) END AS soil_ph,
+-    -- where the pH reading came from (empty when there is no valid pH)
+-    CASE WHEN ph_raw BETWEEN 3.0 AND 10.0 THEN soil_data_source END AS soil_ph_source,
+-
++    ROUND(soil_ph, 1)  AS soil_ph,
++    -- where the pH came from (empty when there is no valid pH)
++    CASE WHEN soil_ph IS NOT NULL THEN soil_data_source END AS soil_ph_source,
+     ROUND(organic_carbon_g_kg, 2) AS organic_carbon_g_kg,
+     ROUND(nitrogen_g_kg, 3)       AS nitrogen_g_kg,
+ 
+@@ -61,5 +88,4 @@ SELECT
+ 
+     soil_data_source,
+     ingested_at
+-FROM converted
+-WHERE row_num = 1
++FROM combined
+diff --git a/ml/tests/test_ml_pipelines.py b/ml/tests/test_ml_pipelines.py
+index aa80b8b..1866da6 100644
+--- a/ml/tests/test_ml_pipelines.py
++++ b/ml/tests/test_ml_pipelines.py
+@@ -351,4 +351,17 @@ class TestXGBoostTraining:
+         importance_sum = model.feature_importances_.sum()
+         assert abs(importance_sum - 1.0) < 0.01, (
+             f"Feature importances sum to {importance_sum}, expected ~1.0"
+-        )
+\ No newline at end of file
++        )
++
++class TestMartsSchema:
++
++    def test_defaults_to_local_schema(self, monkeypatch):
++        """Local docker builds keep working without any setting."""
++        from ml.utils.db import marts_schema
++        monkeypatch.delenv("PLANTING_MARTS_SCHEMA", raising=False)
++        assert marts_schema() == "public_marts"
++
++    def test_can_point_at_the_production_schema(self, monkeypatch):
++        from ml.utils.db import marts_schema
++        monkeypatch.setenv("PLANTING_MARTS_SCHEMA", "planting_intelligence_marts")
++        assert marts_schema() == "planting_intelligence_marts"
+diff --git a/ml/utils/db.py b/ml/utils/db.py
+index 5d3f48b..b0bf83b 100644
+--- a/ml/utils/db.py
++++ b/ml/utils/db.py
+@@ -8,6 +8,15 @@ import pandas as pd
+ from sqlalchemy import create_engine, text
+ 
+ 
++def marts_schema() -> str:
++    """
++    Schema that holds the mart tables. Local docker builds use `public_marts`;
++    the production dbt target writes to `planting_intelligence_marts`.
++    Set PLANTING_MARTS_SCHEMA to override.
++    """
++    return os.environ.get("PLANTING_MARTS_SCHEMA", "public_marts")
++
++
+ def get_engine():
+     """
+     Returns a SQLAlchemy engine pointed at the database.
+@@ -24,9 +33,9 @@ def load_annual_features() -> pd.DataFrame:
+     Loads mart_ml_annual_features from Postgres.
+     """
+     engine = get_engine()
+-    query = text("""
++    query = text(f"""
+         SELECT *
+-        FROM public_marts.mart_ml_annual_features
++        FROM {marts_schema()}.mart_ml_annual_features
+         ORDER BY city
+     """)
+     with engine.connect() as conn:
+@@ -42,9 +51,9 @@ def load_seasonal_features() -> pd.DataFrame:
+     Only returns rows with monthly_feature_completeness >= 3, since we need at least 3 months of data to train a seasonal model.
+     """
+     engine = get_engine()
+-    query = text("""
++    query = text(f"""
+         SELECT *
+-        FROM public_marts.mart_ml_seasonal_features
++        FROM {marts_schema()}.mart_ml_seasonal_features
+         WHERE monthly_feature_completeness >= 3
+         ORDER BY city, month
+     """)
+@@ -67,7 +76,7 @@ def save_predictions(predictions_df: pd.DataFrame, table_name: str):
+     predictions_df.to_sql(
+         table_name,
+         engine,
+-        schema="public_marts",
++        schema=marts_schema(),
+         if_exists="replace",
+         index=False
+     )
+diff --git a/scripts/fetch_soil.py b/scripts/fetch_soil.py
+index b3ef18d..5c23fba 100644
+--- a/scripts/fetch_soil.py
++++ b/scripts/fetch_soil.py
+@@ -2,7 +2,6 @@
+ Fetches REAL, field-measured soil data from WoSIS (World Soil
+ """
+ 
+-import profile
+ import sys
+ import time
+ import math
+@@ -150,48 +149,69 @@ def query_wosis_box(lat, lon, box_deg):
+         raise RuntimeError(f"WoSIS GraphQL errors: {data['errors']}")
+     return data["data"]["wosisLatestProfiles"]
+ 
++# Soil columns we store: column name -> (WoSIS field, factor used to store it as a whole number)
++SOIL_PROPERTIES = {
++    "phh2o_0_5cm":    ("phaqValues",   10),
++    "clay_0_5cm":     ("clayValues",   10),
++    "sand_0_5cm":     ("sandValues",   10),
++    "silt_0_5cm":     ("siltValues",   10),
++    "soc_0_5cm":      ("orgcValues",   10),
++    "nitrogen_0_5cm": ("nitkjdValues", 100),
++}
++
++
++def missing_properties(profiles, lat, lon):
++    """Names of the soil properties that no profile in this list has a measurement for."""
++    return [
++        column for column, (field, _) in SOIL_PROPERTIES.items()
++        if distance_weighted_average(profiles, lat, lon, field)[1] == 0
++    ]
++
++
+ # Fetch soil data for a specific city
+ def fetch_soil_for_city(city_name, lat, lon):
+     """
+-    Returns (profiles, box_size_used)box_size_used is None if genuinely no coverage 
+-    was found at any tested radius.
++    Returns a list of (box_degrees, profiles), from the smallest search box to the widest used.
++
++    The search widens when the small box has no profiles OR when some property (for example pH)
++    has no measurement in it. Widening only for "no profiles" left pH empty for cities where
++    nearby profiles existed but none had a pH reading.
+     """
++    levels = []
+     for box_deg in BOX_SIZES_DEG:
+         profiles = query_wosis_box(lat, lon, box_deg)
+         if profiles:
+-            return profiles, box_deg
+-        logger.info(f"  No profiles within {box_deg}deg — widening")
+-    return [], None
++            levels.append((box_deg, profiles))
++            if not missing_properties(profiles, lat, lon):
++                break
++        logger.info(f"  Not enough data within {box_deg}deg - widening")
++    return levels
++
+ 
+ # Build a row of soil data for a city
+-def build_soil_row(city, country, lat, lon, profiles, box_deg_used):
+-    # Computes the distance-weighted average of each soil property across all found 
+-    # profiles, using only the shallowest layer of each profile. 
+-    # Returns a dictionary representing a row of soil data for the city.
+-    ph, n_ph     = distance_weighted_average(profiles, lat, lon, "phaqValues")
+-    clay, n_clay = distance_weighted_average(profiles, lat, lon, "clayValues")
+-    sand, n_sand = distance_weighted_average(profiles, lat, lon, "sandValues")
+-    silt, n_silt = distance_weighted_average(profiles, lat, lon, "siltValues")
+-    orgc, n_orgc = distance_weighted_average(profiles, lat, lon, "orgcValues")
+-    nitkjd, n_n  = distance_weighted_average(profiles, lat, lon, "nitkjdValues")
+-
+-    return {
+-        "city":              city,
+-        "country":           country,
+-        "latitude":          lat,
+-        "longitude":         lon,
+-        "soil_data_source":  "wosis",
+-        "ingested_at":       datetime.utcnow(),
+-        "phh2o_0_5cm":       round(ph * 10) if ph is not None else None,
+-        "clay_0_5cm":        round(clay * 10) if clay is not None else None,
+-        "sand_0_5cm":        round(sand * 10) if sand is not None else None,
+-        "silt_0_5cm":        round(silt * 10) if silt is not None else None,
+-        "soc_0_5cm":         round(orgc * 10) if orgc is not None else None,
+-        "nitrogen_0_5cm":    round(nitkjd * 100) if nitkjd is not None else None,
+-        "wosis_profiles_used":     len(profiles),
+-        "wosis_box_degrees_used":  box_deg_used,
+-        "wosis_ph_n_profiles":     n_ph,
++def build_soil_row(city, country, lat, lon, levels):
++    """
++    For each soil property, takes the distance-weighted average from the smallest search box
++    that has a measurement for it (shallowest layer of each profile only).
++    A property with no measurement in any box stays empty.
++    """
++    row = {
++        "city": city, "country": country, "latitude": lat, "longitude": lon,
++        "soil_data_source": "wosis", "ingested_at": datetime.utcnow(),
+     }
++    n_used = {}
++    for column, (field, factor) in SOIL_PROPERTIES.items():
++        row[column], n_used[column] = None, 0
++        for _, profiles in levels:
++            value, n = distance_weighted_average(profiles, lat, lon, field)
++            if value is not None:
++                row[column], n_used[column] = round(value * factor), n
++                break
++    row["wosis_profiles_used"] = len(levels[0][1]) if levels else 0
++    row["wosis_box_degrees_used"] = levels[-1][0] if levels else None
++    row["wosis_ph_n_profiles"] = n_used["phh2o_0_5cm"]
++    return row
++
+ 
+ # Fetch soil data for all 54 cities from WoSIS and writes to public.soil. 
+ def fetch_soil():
+@@ -210,24 +230,24 @@ def fetch_soil():
+         logger.info(f"[{i:2d}/{len(GLOBAL_LOCATIONS)}] {city_name}")
+ 
+         try:
+-            profiles, box_used = fetch_soil_for_city(city_name, lat, lon)
++            levels = fetch_soil_for_city(city_name, lat, lon)
+ 
+-            if not profiles:
++            if not levels:
+                 logger.info(f"  No WoSIS coverage found for {city_name} — leaving NULL")
+                 no_coverage.append(city_name)
+-                row = build_soil_row(city_name, loc["Country"], lat, lon, [], None)
++                row = build_soil_row(city_name, loc["Country"], lat, lon, [])
+                 df = pd.DataFrame([row])
+                 df.to_sql("soil", engine, schema="public", if_exists="append", index=False)
+                 continue
+ 
+-            row = build_soil_row(city_name, loc["Country"], lat, lon, profiles, box_used)
++            row = build_soil_row(city_name, loc["Country"], lat, lon, levels)
+             df = pd.DataFrame([row])
+             df.to_sql("soil", engine, schema="public", if_exists="append", index=False)
+ 
+             ph_display = row["phh2o_0_5cm"] / 10 if row["phh2o_0_5cm"] else "null"
+             logger.info(
+-                f"  Saved | pH: {ph_display} | {len(profiles)} profiles "
+-                f"within {box_used}deg | source: wosis"
++                f"  Saved | pH: {ph_display} | {row['wosis_profiles_used']} profiles "
++                f"in the closest box, widest box {row['wosis_box_degrees_used']}deg | source: wosis"
+             )
+             succeeded += 1
+ 
+diff --git a/tests/unit/test_fetch_soil.py b/tests/unit/test_fetch_soil.py
+new file mode 100644
+index 0000000..511ec0d
+--- /dev/null
++++ b/tests/unit/test_fetch_soil.py
+@@ -0,0 +1,101 @@
++"""
++What matters for the WoSIS soil fetch:
++  - The search widens when a property (pH) has no measurement in the small box,
++    not only when the small box has no profiles at all.
++  - Each property comes from the closest box that has a value for it.
++  - A property with no measurement anywhere stays empty (never filled with a guess).
++"""
++
++import os
++import sys
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
++
++import fetch_soil  # noqa: E402
++
++LAT, LON = 52.52, 13.40
++
++
++def profile(lat, lon, ph=None, clay=30.0):
++    """A WoSIS profile with one layer. Properties given as None have no measurement."""
++    def val(v):
++        return [] if v is None else [{"value": [str(v)], "valueAvg": v}]
++    return {
++        "profileId": 1, "latitude": lat, "longitude": lon,
++        "layers": [{
++            "upperDepth": 0, "lowerDepth": 5,
++            "phaqValues": val(ph), "clayValues": val(clay), "sandValues": val(40.0),
++            "siltValues": val(30.0), "orgcValues": val(12.0), "nitkjdValues": val(1.2),
++        }],
++    }
++
++
++def fake_query(small, large):
++    """Returns a stand-in for query_wosis_box giving `small` for 0.5 deg and `large` for 2.0 deg."""
++    def query(lat, lon, box_deg):
++        return small if box_deg == 0.5 else large
++    return query
++
++
++def test_widens_when_small_box_has_profiles_but_no_ph(monkeypatch):
++    near = [profile(52.5, 13.4, ph=None)]
++    far = [profile(52.0, 14.0, ph=6.4)]
++    monkeypatch.setattr(fetch_soil, "query_wosis_box", fake_query(near, far))
++
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++
++    assert [box for box, _ in levels] == [0.5, 2.0]
++    assert row["phh2o_0_5cm"] == 64          # pH 6.4 stored x10, from the wider box
++    assert row["wosis_box_degrees_used"] == 2.0
++    assert row["wosis_ph_n_profiles"] == 1
++
++
++def test_does_not_widen_when_everything_is_present(monkeypatch):
++    near = [profile(52.5, 13.4, ph=7.0)]
++    calls = []
++
++    def query(lat, lon, box_deg):
++        calls.append(box_deg)
++        return near
++
++    monkeypatch.setattr(fetch_soil, "query_wosis_box", query)
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++
++    assert calls == [0.5]
++    assert row["phh2o_0_5cm"] == 70
++
++
++def test_close_values_win_over_wider_box_values(monkeypatch):
++    near = [profile(52.5, 13.4, ph=None, clay=20.0)]
++    far = [profile(52.0, 14.0, ph=6.4, clay=50.0)]
++    monkeypatch.setattr(fetch_soil, "query_wosis_box", fake_query(near, far))
++
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++
++    assert row["clay_0_5cm"] == 200          # clay 20 % from the CLOSE box, not 50 % from the wide one
++
++
++def test_property_missing_everywhere_stays_empty(monkeypatch):
++    monkeypatch.setattr(
++        fetch_soil, "query_wosis_box",
++        fake_query([profile(52.5, 13.4, ph=None)], [profile(52.0, 14.0, ph=None)]))
++
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++
++    assert row["phh2o_0_5cm"] is None
++    assert row["wosis_ph_n_profiles"] == 0
++
++
++def test_no_profiles_at_all_gives_empty_row(monkeypatch):
++    monkeypatch.setattr(fetch_soil, "query_wosis_box", fake_query([], []))
++    levels = fetch_soil.fetch_soil_for_city("Nowhere", 0.0, 0.0)
++    row = fetch_soil.build_soil_row("Nowhere", "XX", 0.0, 0.0, levels)
++
++    assert levels == []
++    assert row["phh2o_0_5cm"] is None and row["clay_0_5cm"] is None
++    assert row["wosis_box_degrees_used"] is None
+-- 
+2.43.0
+

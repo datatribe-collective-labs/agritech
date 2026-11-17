@@ -1,0 +1,897 @@
+From a82865af6c622145b6972a2e29f3025345fe759c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 19:22:19 +0300
+Subject: [PATCH] MLOps: weekly retraining with data checks, a quality gate and
+ run history
+
+- ml/mlops: data health checks, quality gate, run folders + ml_training_runs table
+- train_suitability split into reusable steps (train_and_evaluate, fit_final_model)
+- Airflow DAG planting_ml_retraining (Sundays 09:00): dbt build, then retrain
+- API: GET /model/runs
+- Rejected models never replace the live model or scores
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ .gitignore                      |   3 +
+ api/routers/deps.py             |   1 +
+ api/routers/meta.py             |  22 +++-
+ api/schemas.py                  |  16 +++
+ dags/planting_ml_retraining.py  |  60 ++++++++++
+ ml/MLOPS.md                     |  48 ++++++++
+ ml/mlops/data_checks.py         |  60 ++++++++++
+ ml/mlops/quality_gate.py        |  52 +++++++++
+ ml/mlops/retrain_suitability.py |  86 ++++++++++++++
+ ml/mlops/run_history.py         |  99 ++++++++++++++++
+ ml/models/train_suitability.py  |  56 ++++++---
+ ml/tests/test_mlops.py          | 196 ++++++++++++++++++++++++++++++++
+ tests/api/test_api.py           |  19 ++++
+ 13 files changed, 697 insertions(+), 21 deletions(-)
+ create mode 100644 dags/planting_ml_retraining.py
+ create mode 100644 ml/MLOPS.md
+ create mode 100644 ml/mlops/data_checks.py
+ create mode 100644 ml/mlops/quality_gate.py
+ create mode 100644 ml/mlops/retrain_suitability.py
+ create mode 100644 ml/mlops/run_history.py
+ create mode 100644 ml/tests/test_mlops.py
+
+diff --git a/.gitignore b/.gitignore
+index 6f93cea..3bb5ad0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -221,3 +221,6 @@ __marimo__/
+ dbt_packages/
+ venvs/
+ venvs/
++
++# Every retraining run keeps its own model copy (see ml/MLOPS.md); they are rebuilt, not versioned in git
++ml/saved_models/suitability_runs/
+diff --git a/api/routers/deps.py b/api/routers/deps.py
+index 6ccc8b1..c9af254 100644
+--- a/api/routers/deps.py
++++ b/api/routers/deps.py
+@@ -21,6 +21,7 @@ class Tables:
+         self.companions = table("mart_city_companions", schema)
+         self.scores = table("ml_species_city_suitability", schema)
+         self.reasons = table("ml_species_city_explanations", schema)
++        self.runs = table("ml_training_runs", schema)
+ 
+ 
+ def known_city(city: str, conn: Connection = Depends(get_connection), t: Tables = Depends(tables)) -> str:
+diff --git a/api/routers/meta.py b/api/routers/meta.py
+index 1c02d03..c3cb1a1 100644
+--- a/api/routers/meta.py
++++ b/api/routers/meta.py
+@@ -2,14 +2,18 @@
+ 
+ import json
+ 
+-from fastapi import APIRouter, Depends, HTTPException
++from typing import List
++
++from fastapi import APIRouter, Depends, HTTPException, Query
+ from sqlalchemy import text
+ from sqlalchemy.engine import Connection
++from sqlalchemy.exc import DBAPIError
+ 
+ from api import config
+ from api.caveats import CAVEATS
+-from api.db import get_connection
+-from api.schemas import ModelInfo
++from api.db import get_connection, rows
++from api.routers.deps import Tables, tables
++from api.schemas import ModelInfo, TrainingRun
+ 
+ router = APIRouter(tags=["service"])
+ 
+@@ -27,3 +31,15 @@ def model_info():
+         raise HTTPException(status_code=404, detail="No training report found. Run ml.models.train_suitability.")
+     report = json.loads(path.read_text())
+     return {key: report.get(key) for key in ModelInfo.model_fields if key != "caveats"} | {"caveats": CAVEATS}
++
++
++@router.get("/model/runs", response_model=List[TrainingRun], summary="Recent retraining attempts, newest first")
++def training_runs(limit: int = Query(10, ge=1, le=100), conn: Connection = Depends(get_connection),
++                  t: Tables = Depends(tables)):
++    try:
++        return rows(conn, f"""
++            SELECT run_id, trained_at, status, rejected_because, model_auc, best_baseline,
++                   gain_over_baseline_auc, gain_range_low, gain_range_high, top_n_hit_rate, cities, rows_used
++            FROM {t.runs} ORDER BY run_id DESC LIMIT :limit""", limit=limit)
++    except DBAPIError:
++        return []  # no retraining has been recorded yet, so the history table does not exist
+diff --git a/api/schemas.py b/api/schemas.py
+index 2a63a55..a7607a7 100644
+--- a/api/schemas.py
++++ b/api/schemas.py
+@@ -163,6 +163,22 @@ class CityContext(BaseModel):
+     caveats: List[str]
+ 
+ 
++class TrainingRun(BaseModel):
++    """One retraining attempt: what was tested, and whether the model was allowed to go live."""
++    run_id: str
++    trained_at: Optional[str] = None
++    status: str                                   # "accepted" (went live) or "rejected"
++    rejected_because: Optional[str] = None
++    model_auc: Optional[float] = None
++    best_baseline: Optional[str] = None
++    gain_over_baseline_auc: Optional[float] = None
++    gain_range_low: Optional[float] = None
++    gain_range_high: Optional[float] = None
++    top_n_hit_rate: Optional[float] = None
++    cities: Optional[int] = None
++    rows_used: Optional[int] = None
++
++
+ class ModelInfo(BaseModel):
+     verdict: Optional[str] = None
+     trained_at: Optional[str] = None
+diff --git a/dags/planting_ml_retraining.py b/dags/planting_ml_retraining.py
+new file mode 100644
+index 0000000..32fabf5
+--- /dev/null
++++ b/dags/planting_ml_retraining.py
+@@ -0,0 +1,60 @@
++"""
++Weekly retraining of the crop suitability model.
++
++ORDER
++  1. Rebuild the tables the model learns from (dbt build of mart_species_city_suitability
++     and everything it depends on).
++  2. Retrain with safety checks (ml/mlops/retrain_suitability.py). If the new model is not
++     good enough, the task FAILS on purpose and the app keeps showing the previous scores.
++
++WHEN
++  Sundays at 09:00. The daily data pipeline starts at 06:00 and its slowest step (the soil
++  fetch) is allowed up to 90 minutes, so by 09:00 the freshest soil data is in the database.
++
++WHY BASH COMMANDS
++  dbt and the ML libraries live in their own virtual environments, separate from Airflow's,
++  so each step runs with that environment's own Python instead of being imported here.
++"""
++
++from datetime import datetime, timedelta
++
++from airflow import DAG
++from airflow.operators.bash import BashOperator
++
++REPO = "/root/agritech"
++DBT_COMMAND = f"{REPO}/venvs/dbt/bin/dbt"
++ML_PYTHON = f"{REPO}/venvs/ml/bin/python"
++
++default_args = {
++    "owner": "planting_team",
++    "depends_on_past": False,
++    "email_on_failure": False,
++    "retries": 1,
++    "retry_delay": timedelta(minutes=10),
++}
++
++with DAG(
++    dag_id="planting_ml_retraining",
++    description="Weekly: rebuild model inputs, retrain the suitability model, publish only if it passes the quality gate",
++    default_args=default_args,
++    start_date=datetime(2024, 1, 1),
++    schedule_interval="0 9 * * 0",
++    catchup=False,
++    tags=["planting", "ml", "weekly"],
++) as dag:
++
++    rebuild_model_inputs = BashOperator(
++        task_id="rebuild_model_inputs",
++        bash_command=f"cd {REPO}/dbt && {DBT_COMMAND} build --select +mart_species_city_suitability",
++        execution_timeout=timedelta(minutes=30),
++    )
++
++    retrain_and_publish = BashOperator(
++        task_id="retrain_and_publish_if_good_enough",
++        bash_command=f"cd {REPO} && {ML_PYTHON} -m ml.mlops.retrain_suitability",
++        execution_timeout=timedelta(minutes=30),
++        # A rejected model is not a glitch, so trying again an hour later would only repeat it.
++        retries=0,
++    )
++
++    rebuild_model_inputs >> retrain_and_publish
+diff --git a/ml/MLOPS.md b/ml/MLOPS.md
+new file mode 100644
+index 0000000..411f1da
+--- /dev/null
++++ b/ml/MLOPS.md
+@@ -0,0 +1,48 @@
++# How the suitability model is kept fresh and safe
++
++The crop suitability model is retrained every week by Airflow. It only replaces the model
++in use if it passes a quality gate. This page explains each piece in plain words.
++
++## The weekly run (`dags/planting_ml_retraining.py`)
++
++Every Sunday at 09:00 (after the daily data pipeline has finished):
++
++1. **Rebuild the model inputs.** `dbt build` refreshes `mart_species_city_suitability` and
++   the tables it depends on.
++2. **Retrain with safety checks.** `python -m ml.mlops.retrain_suitability`
++
++## What the retraining step does (`ml/mlops/retrain_suitability.py`)
++
++| Step | What it checks | If it fails |
++|---|---|---|
++| Data health (`data_checks.py`) | Enough cities and crops, no duplicate pairs, no mostly-empty feature, both answers present in the label | Stops. Nothing changes. |
++| Has the data changed? | A fingerprint of the training table is compared with the one behind the live model | Stops quietly: nothing new to learn. `--force` overrides. |
++| Train and test | Every city is scored by a model that never saw it, and compared with two simple baselines | - |
++| Quality gate (`quality_gate.py`) | The model still beats the best baseline, and is not clearly worse than the live model (more than 0.03 AUC lower) | The run is recorded as **rejected**. The old model and scores stay live. The Airflow task turns red so someone looks. |
++| Publish (`run_history.py`) | - | Accepted runs become the live model; scores and reasons tables are replaced. |
++
++A gain over the baseline whose 95% range includes zero is **not** a rejection, but it is
++printed as a warning, because with this few cities it may be chance.
++
++## Where to look
++
++- **Run folders:** `ml/saved_models/suitability_runs/<run_id>/` holds each run's `model.pkl`
++  and `report.json` (test results, decision, reasons, data fingerprint).
++- **Database table:** `ml_training_runs`, one row per run, in the marts schema.
++- **API:** `GET /model/runs` lists recent runs, newest first. `GET /model` describes the live model.
++- **Live files** (only ever written by an accepted run):
++  `ml/saved_models/suitability_model.pkl`, `ml/evaluation_reports/suitability_latest.json`.
++
++## Running it by hand
++
++    python -m ml.mlops.retrain_suitability           # normal, with all checks
++    python -m ml.mlops.retrain_suitability --force   # even if the data has not changed
++    python -m ml.models.train_suitability --dry-run  # only print the test results, save nothing
++
++## What this does not do (yet)
++
++- It cannot tell whether recommendations are *right* for farmers. The label is a recording
++  proxy (crop recorded near the city), so the tests measure how well the model agrees with
++  recordings on unseen cities, not yield.
++- No alerting beyond the failed Airflow task.
++- No tracking of how the live data drifts over time beyond the fingerprint changing.
+diff --git a/ml/mlops/data_checks.py b/ml/mlops/data_checks.py
+new file mode 100644
+index 0000000..a11c038
+--- /dev/null
++++ b/ml/mlops/data_checks.py
+@@ -0,0 +1,60 @@
++"""
++Checks on the training data, run BEFORE a model is trained.
++
++WHY
++  A model trained on a broken table still produces scores, and nobody notices.
++  These checks stop the run early and say in plain words what is wrong.
++
++TWO THINGS HERE
++  problems_with_training_data(df)  ->  a list of plain sentences; an empty list means "fine"
++  data_fingerprint(df)             ->  a short code that changes whenever the data changes,
++                                       so an unchanged week does not trigger a pointless retrain
++"""
++
++import hashlib
++
++import pandas as pd
++
++from ml.models.train_suitability import FEATURES, LABEL
++
++MIN_CITIES = 20           # the model is tested city by city, so it needs a fair number of cities
++MIN_CROPS = 10
++MAX_EMPTY_SHARE = 0.60    # a feature that is empty in more than this share of rows is not usable
++
++
++def problems_with_training_data(df: pd.DataFrame) -> list:
++    problems = []
++
++    missing_columns = [name for name in FEATURES + [LABEL, "city", "species"] if name not in df.columns]
++    if missing_columns:
++        # Nothing else can be checked without these columns.
++        return [f"The table is missing columns the model needs: {', '.join(missing_columns)}."]
++
++    if df["city"].nunique() < MIN_CITIES:
++        problems.append(f"Only {df['city'].nunique()} cities; at least {MIN_CITIES} are needed for a fair test.")
++    if df["species"].nunique() < MIN_CROPS:
++        problems.append(f"Only {df['species'].nunique()} crops; at least {MIN_CROPS} are needed.")
++
++    if df.duplicated(["city", "species"]).any():
++        problems.append("Some city and crop pairs appear more than once.")
++
++    if df[LABEL].nunique() < 2:
++        problems.append("Every crop-city pair has the same recorded/not-recorded answer, so nothing can be learned.")
++
++    numbers = df[FEATURES].apply(pd.to_numeric, errors="coerce")
++    for name in FEATURES:
++        empty_share = numbers[name].isna().mean()
++        if empty_share > MAX_EMPTY_SHARE:
++            problems.append(f"'{name}' is empty in {empty_share:.0%} of rows (limit {MAX_EMPTY_SHARE:.0%}).")
++
++    return problems
++
++
++def data_fingerprint(df: pd.DataFrame) -> str:
++    """
++    A 16-character code for the exact training data. Same data in any row order gives the
++    same code; any changed value, added city or removed crop gives a different one.
++    """
++    columns = ["city", "species", LABEL] + FEATURES
++    ordered = df[columns].sort_values(["city", "species"]).reset_index(drop=True)
++    return hashlib.sha256(ordered.to_csv(index=False).encode()).hexdigest()[:16]
+diff --git a/ml/mlops/quality_gate.py b/ml/mlops/quality_gate.py
+new file mode 100644
+index 0000000..5233dad
+--- /dev/null
++++ b/ml/mlops/quality_gate.py
+@@ -0,0 +1,52 @@
++"""
++The quality gate: decides whether a freshly trained model may replace the one in use.
++
++THE RULE IN ONE LINE
++  A new model is published only if it is still better than the simple baselines on cities
++  it has never seen, and not clearly worse than the model it would replace.
++  Otherwise the previous scores stay live and the run is recorded as "rejected".
++
++Each rule below is a plain sentence, so a rejection explains itself.
++"""
++
++# How much worse than the model in use is tolerated, in AUC points (0.5 = guessing, 1.0 = perfect).
++# Small ups and downs between runs are normal when the data changes a little.
++MAX_DROP_VS_CURRENT_MODEL = 0.03
++
++ACCEPTED = "accepted"
++REJECTED = "rejected"
++
++
++def reasons_to_reject(results: dict, current_model_results: dict = None) -> list:
++    """
++    results               the test results of the new model (from train_suitability.evaluate)
++    current_model_results the test results of the model now in use, or None for the first run
++    Returns plain sentences. An empty list means the new model may be published.
++    """
++    reasons = []
++
++    gain = results["model_beats_best_baseline_by_auc"]
++    if gain <= 0:
++        reasons.append(
++            f"The model does not beat the best simple baseline ({results['best_baseline']}): "
++            f"gain is {gain:+.3f} AUC."
++        )
++
++    if current_model_results is not None:
++        new_auc = results["model"]["roc_auc"]
++        current_auc = current_model_results["model"]["roc_auc"]
++        if new_auc < current_auc - MAX_DROP_VS_CURRENT_MODEL:
++            reasons.append(
++                f"The new model is clearly worse than the one in use: AUC {new_auc:.3f} "
++                f"versus {current_auc:.3f} (more than {MAX_DROP_VS_CURRENT_MODEL} lower)."
++            )
++
++    return reasons
++
++
++def warnings(results: dict) -> list:
++    """Things worth a human look that do not block publishing."""
++    low, high = results["gain_95_percent_range"]
++    if low <= 0 < results["model_beats_best_baseline_by_auc"]:
++        return [f"The gain over the baseline could be chance: its 95% range is {low:.3f} to {high:.3f}."]
++    return []
+diff --git a/ml/mlops/retrain_suitability.py b/ml/mlops/retrain_suitability.py
+new file mode 100644
+index 0000000..3da44b5
+--- /dev/null
++++ b/ml/mlops/retrain_suitability.py
+@@ -0,0 +1,86 @@
++"""
++Weekly retraining of the suitability model, with safety checks. Airflow runs this.
++
++WHAT HAPPENS, IN ORDER
++  1. Load the training table from the database.
++  2. Check the data is healthy.                      -> unhealthy: stop, change nothing
++  3. Has the data changed since the live model?      -> unchanged: stop, nothing to learn
++  4. Train and test on cities the model has not seen.
++  5. Quality gate: still better than the baselines?  -> no: keep the old scores, record "rejected"
++  6. Save the run (folder + database row).
++  7. If accepted: make it live and replace the scores and reasons the app reads.
++
++EXIT CODE
++  0  finished normally (accepted, or nothing to do)
++  1  stopped on purpose (unhealthy data or rejected model); Airflow marks the task failed
++     so someone looks, while the app keeps serving the previous scores.
++
++RUN BY HAND
++  python -m ml.mlops.retrain_suitability            # normal run
++  python -m ml.mlops.retrain_suitability --force    # retrain even if the data has not changed
++"""
++
++import argparse
++import sys
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).parent.parent.parent))
++
++from ml.explainability.explain_suitability import build_explanations  # noqa: E402
++from ml.mlops import quality_gate, run_history  # noqa: E402
++from ml.mlops.data_checks import data_fingerprint, problems_with_training_data  # noqa: E402
++from ml.models.train_suitability import (  # noqa: E402
++    FEATURES, fit_final_model, scores_to_save, train_and_evaluate,
++)
++from ml.utils.db import get_engine, load_suitability_features, marts_schema, save_predictions  # noqa: E402
++
++
++def retrain(force: bool = False) -> int:
++    """Runs the steps above. Returns the exit code."""
++    df = load_suitability_features()
++
++    problems = problems_with_training_data(df)
++    if problems:
++        print("[retrain] STOPPED: the training data is not healthy.")
++        for problem in problems:
++            print(f"  - {problem}")
++        return 1
++
++    engine, schema = get_engine(), marts_schema()
++    fingerprint = data_fingerprint(df)
++    if not force and fingerprint == run_history.last_accepted_fingerprint(engine, schema):
++        print(f"[retrain] Data unchanged since the live model ({fingerprint}). Nothing to do.")
++        return 0
++
++    scored, contributions, results = train_and_evaluate(df)
++    reasons = quality_gate.reasons_to_reject(results, run_history.live_results())
++    warnings = quality_gate.warnings(results)
++    status = quality_gate.REJECTED if reasons else quality_gate.ACCEPTED
++
++    run_id = run_history.new_run_id()
++    folder = run_history.save_run(run_id, fit_final_model(df), FEATURES, results,
++                                  status, reasons, warnings, fingerprint)
++    run_history.record_in_database(engine, schema, run_id, results, status, reasons,
++                                   fingerprint, rows=len(df))
++    print(f"[retrain] Run {run_id}: {status}. {results['verdict']}")
++    for warning in warnings:
++        print(f"  warning: {warning}")
++
++    if reasons:
++        print("[retrain] REJECTED. The previous model and scores stay live.")
++        for reason in reasons:
++            print(f"  - {reason}")
++        return 1
++
++    run_history.make_live(folder)
++    save_predictions(scores_to_save(scored), "ml_species_city_suitability")
++    save_predictions(build_explanations(df, contributions, top_k=3), "ml_species_city_explanations")
++    print("[retrain] Published: new model, scores and reasons are live.")
++    return 0
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(description="Retrain the suitability model with safety checks.")
++    parser.add_argument("--force", action="store_true",
++                        help="retrain even if the data has not changed since the live model")
++    sys.exit(retrain(force=parser.parse_args().force))
+diff --git a/ml/mlops/run_history.py b/ml/mlops/run_history.py
+new file mode 100644
+index 0000000..5b9255c
+--- /dev/null
++++ b/ml/mlops/run_history.py
+@@ -0,0 +1,99 @@
++"""
++Remembers every training run, so you can answer: "what is live, and how did we get here?"
++
++WHAT IS SAVED PER RUN
++  A dated folder  ml/saved_models/suitability_runs/<run_id>/
++      model.pkl     the trained model
++      report.json   the test results, the gate's decision and the data fingerprint
++  One row in the database table  ml_training_runs  (same facts, easy to query and show in the app)
++
++WHAT "LIVE" MEANS
++  Only an accepted run is copied to the two files the rest of the system reads:
++      ml/saved_models/suitability_model.pkl
++      ml/evaluation_reports/suitability_latest.json
++  A rejected run is kept for inspection but never goes live.
++"""
++
++import json
++import pickle
++import shutil
++from datetime import datetime
++from pathlib import Path
++
++import pandas as pd
++from sqlalchemy import text
++
++from ml.mlops.quality_gate import ACCEPTED
++
++ML_DIR = Path(__file__).parent.parent
++RUNS_DIR = ML_DIR / "saved_models" / "suitability_runs"
++LIVE_MODEL = ML_DIR / "saved_models" / "suitability_model.pkl"
++LIVE_REPORT = ML_DIR / "evaluation_reports" / "suitability_latest.json"
++RUNS_TABLE = "ml_training_runs"
++
++
++def new_run_id() -> str:
++    """Sorts oldest to newest, e.g. 2026-10-09_19-20-46-512 (the last part is milliseconds)."""
++    now = datetime.now()
++    return now.strftime("%Y-%m-%d_%H-%M-%S") + f"-{now.microsecond // 1000:03d}"
++
++
++def save_run(run_id: str, model, features: list, results: dict, status: str,
++             reasons: list, warnings: list, fingerprint: str) -> Path:
++    """Writes the run's folder and returns it."""
++    folder = RUNS_DIR / run_id
++    folder.mkdir(parents=True)  # fails if the folder exists: a past run is never overwritten
++    with open(folder / "model.pkl", "wb") as f:
++        pickle.dump({"model": model, "features": features}, f)
++    report = results | {"run_id": run_id, "status": status, "rejected_because": reasons,
++                        "warnings": warnings, "data_fingerprint": fingerprint}
++    (folder / "report.json").write_text(json.dumps(report, indent=2))
++    return folder
++
++
++def make_live(run_folder: Path) -> None:
++    """Copies an accepted run to the files the API and the AI layer read."""
++    LIVE_MODEL.parent.mkdir(parents=True, exist_ok=True)
++    LIVE_REPORT.parent.mkdir(parents=True, exist_ok=True)
++    shutil.copyfile(run_folder / "model.pkl", LIVE_MODEL)
++    shutil.copyfile(run_folder / "report.json", LIVE_REPORT)
++
++
++def live_results():
++    """Test results of the model now in use, or None if no model has been published yet."""
++    if not LIVE_REPORT.exists():
++        return None
++    return json.loads(LIVE_REPORT.read_text())
++
++
++def record_in_database(engine, schema: str, run_id: str, results: dict, status: str,
++                       reasons: list, fingerprint: str, rows: int) -> None:
++    """Adds one row to ml_training_runs (the table is created on first use)."""
++    row = pd.DataFrame([{
++        "run_id": run_id,
++        "trained_at": results["trained_at"],
++        "status": status,
++        "rejected_because": " | ".join(reasons),
++        "data_fingerprint": fingerprint,
++        "rows_used": rows,
++        "cities": results["cities"],
++        "model_auc": results["model"]["roc_auc"],
++        "best_baseline": results["best_baseline"],
++        "gain_over_baseline_auc": results["model_beats_best_baseline_by_auc"],
++        "gain_range_low": results["gain_95_percent_range"][0],
++        "gain_range_high": results["gain_95_percent_range"][1],
++        "top_n_hit_rate": results["model"]["top_n_hit_rate"],
++    }])
++    row.to_sql(RUNS_TABLE, engine, schema=schema, if_exists="append", index=False)
++
++
++def last_accepted_fingerprint(engine, schema: str):
++    """Fingerprint of the data behind the live model, or None if there is none (or no table yet)."""
++    query = text(f"SELECT data_fingerprint FROM {schema}.{RUNS_TABLE} "
++                 f"WHERE status = :status ORDER BY run_id DESC LIMIT 1")
++    try:
++        with engine.connect() as conn:
++            row = conn.execute(query, {"status": ACCEPTED}).first()
++    except Exception:  # the table does not exist before the first run
++        return None
++    return row[0] if row else None
+diff --git a/ml/models/train_suitability.py b/ml/models/train_suitability.py
+index 6390d12..4f1cb3e 100644
+--- a/ml/models/train_suitability.py
++++ b/ml/models/train_suitability.py
+@@ -242,42 +242,62 @@ def verdict(results: dict) -> str:
+             "Use the baseline until there is more data.")
+ 
+ 
++def train_and_evaluate(df: pd.DataFrame):
++    """
++    The whole modelling step, with no saving: score every crop-city pair on cities the model
++    has not seen, test it against the baselines, and keep the reasons behind each score.
++    Returns (scored, contributions, results).
++    """
++    scored, contributions = leave_one_city_out_scores(df, with_contributions=True)
++    results = evaluate(scored)
++    results["verdict"] = verdict(results)
++    results["trained_at"] = datetime.now().isoformat(timespec="seconds")
++    return scored, contributions, results
++
++
++def fit_final_model(df: pd.DataFrame) -> XGBClassifier:
++    """The model trained on all cities, for scoring cities that are not in the data yet."""
++    model = XGBClassifier(**XGBOOST_PARAMS)
++    model.fit(_features_as_numbers(df), df[LABEL].astype(int))
++    return model
++
++
++def scores_to_save(scored: pd.DataFrame) -> pd.DataFrame:
++    """
++    The table the AI layer and the API read. Scores are the leave-one-city-out ones, so a
++    city's score never comes from a model that was trained on that city.
++    """
++    scores = scored[["city", "species", LABEL, "model_score"]].rename(
++        columns={"model_score": "suitability_score"})
++    scores["suitability_score"] = scores["suitability_score"].round(4)
++    scores["rank_in_city"] = (
++        scores.groupby("city")["suitability_score"].rank(ascending=False, method="first").astype(int)
++    )
++    return scores
++
++
+ def main(dry_run: bool = False):
++    """Manual run: train, print the test results and (unless dry run) save everything."""
+     df = load_suitability_features()
+     print(f"[suitability] {len(df)} rows, {df['city'].nunique()} cities, "
+           f"{df['species'].nunique()} species, "
+           f"{df[LABEL].mean():.1%} of pairs recorded")
+ 
+-    scored, contributions = leave_one_city_out_scores(df, with_contributions=True)
+-    results = evaluate(scored)
+-    results["verdict"] = verdict(results)
+-    results["trained_at"] = datetime.now().isoformat(timespec="seconds")
+-
++    scored, contributions, results = train_and_evaluate(df)
+     print(json.dumps(results, indent=2))
+ 
+     if dry_run:
+         print("[suitability] dry run: nothing saved")
+         return
+ 
+-    # Final model on all cities, for scoring cities that are not in the data yet.
+-    final_model = XGBClassifier(**XGBOOST_PARAMS)
+-    final_model.fit(_features_as_numbers(df), df[LABEL].astype(int))
+-
+     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+     REPORT_DIR.mkdir(parents=True, exist_ok=True)
+     with open(MODEL_DIR / "suitability_model.pkl", "wb") as f:
+-        pickle.dump({"model": final_model, "features": FEATURES}, f)
++        pickle.dump({"model": fit_final_model(df), "features": FEATURES}, f)
+     with open(REPORT_DIR / "suitability_latest.json", "w") as f:
+         json.dump(results, f, indent=2)
+ 
+-    # Scores saved for the AI layer are the leave-one-city-out ones, so a city's score
+-    # never comes from a model that was trained on that city.
+-    predictions = scored[["city", "species", LABEL, "model_score"]].rename(
+-        columns={"model_score": "suitability_score"})
+-    predictions["suitability_score"] = predictions["suitability_score"].round(4)
+-    predictions["rank_in_city"] = (
+-        predictions.groupby("city")["suitability_score"].rank(ascending=False, method="first").astype(int)
+-    )
++    predictions = scores_to_save(scored)
+     save_predictions(predictions, "ml_species_city_suitability")
+     print(f"[suitability] saved {len(predictions)} scores to ml_species_city_suitability")
+ 
+diff --git a/ml/tests/test_mlops.py b/ml/tests/test_mlops.py
+new file mode 100644
+index 0000000..47e5697
+--- /dev/null
++++ b/ml/tests/test_mlops.py
+@@ -0,0 +1,196 @@
++"""
++Tests for the MLOps layer: data checks, the quality gate, run history and the weekly retrain.
++
++The retrain tests replace the (slow) model training with a fixed result, because training is
++tested in test_suitability.py. What is tested here is the DECISION-MAKING: what goes live,
++what is kept, and what is refused.
++"""
++
++import json
++import os
++import sys
++
++import numpy as np
++import pandas as pd
++import pytest
++from sqlalchemy import create_engine, event
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
++sys.path.insert(0, os.path.dirname(__file__))
++
++from ml.mlops import data_checks, quality_gate, retrain_suitability as rs, run_history  # noqa: E402
++from ml.models import train_suitability as ts  # noqa: E402
++from test_suitability import make_frame  # noqa: E402
++
++SCHEMA = "marts"
++
++
++def results_with(model_auc=0.80, gain=0.05, low=0.01, high=0.09):
++    """Test results shaped like train_suitability.evaluate() output."""
++    return {
++        "rows": 200, "cities": 20, "trained_at": "2026-10-09T12:00:00",
++        "model": {"roc_auc": model_auc, "top_n_hit_rate": 0.7},
++        "best_baseline": "popularity_baseline",
++        "model_beats_best_baseline_by_auc": gain,
++        "gain_95_percent_range": [low, high],
++        "verdict": "test verdict",
++    }
++
++
++# ---------- data checks ----------
++
++def test_healthy_data_has_no_problems():
++    assert data_checks.problems_with_training_data(make_frame()) == []
++
++
++def test_too_few_cities_is_reported_in_plain_words():
++    problems = data_checks.problems_with_training_data(make_frame(n_cities=5))
++    assert any("Only 5 cities" in p for p in problems)
++
++
++def test_missing_column_is_reported():
++    problems = data_checks.problems_with_training_data(make_frame().drop(columns=["soil_ph"]))
++    assert problems == ["The table is missing columns the model needs: soil_ph."]
++
++
++def test_duplicate_city_crop_pairs_are_reported():
++    df = make_frame()
++    problems = data_checks.problems_with_training_data(pd.concat([df, df.head(1)]))
++    assert any("more than once" in p for p in problems)
++
++
++def test_a_feature_that_is_mostly_empty_is_reported():
++    df = make_frame()
++    df.loc[df.sample(frac=0.8, random_state=0).index, "clay_pct"] = np.nan
++    assert any("'clay_pct'" in p for p in data_checks.problems_with_training_data(df))
++
++
++def test_only_one_answer_in_the_label_is_reported():
++    df = make_frame()
++    df[ts.LABEL] = 1
++    assert any("same recorded/not-recorded answer" in p for p in data_checks.problems_with_training_data(df))
++
++
++def test_fingerprint_ignores_row_order_but_notices_changes():
++    df = make_frame()
++    shuffled = df.sample(frac=1, random_state=1)
++    assert data_checks.data_fingerprint(df) == data_checks.data_fingerprint(shuffled)
++
++    changed = df.copy()
++    changed.loc[0, "soil_ph"] += 0.1
++    assert data_checks.data_fingerprint(df) != data_checks.data_fingerprint(changed)
++
++
++# ---------- quality gate ----------
++
++def test_a_good_first_model_is_accepted():
++    assert quality_gate.reasons_to_reject(results_with(), current_model_results=None) == []
++
++
++def test_a_model_that_does_not_beat_the_baseline_is_rejected():
++    reasons = quality_gate.reasons_to_reject(results_with(gain=-0.01))
++    assert len(reasons) == 1 and "does not beat" in reasons[0]
++
++
++def test_a_clearly_worse_model_than_the_live_one_is_rejected():
++    reasons = quality_gate.reasons_to_reject(results_with(model_auc=0.70), results_with(model_auc=0.80))
++    assert len(reasons) == 1 and "worse than the one in use" in reasons[0]
++
++
++def test_a_small_dip_is_tolerated():
++    assert quality_gate.reasons_to_reject(results_with(model_auc=0.78), results_with(model_auc=0.80)) == []
++
++
++def test_a_gain_that_could_be_chance_is_a_warning_not_a_rejection():
++    chancy = results_with(gain=0.03, low=-0.02, high=0.08)
++    assert quality_gate.reasons_to_reject(chancy) == []
++    assert "could be chance" in quality_gate.warnings(chancy)[0]
++
++
++# ---------- run history and the weekly retrain ----------
++
++@pytest.fixture
++def workspace(tmp_path, monkeypatch):
++    """Empty folders and an empty database, so nothing touches the real model or Postgres."""
++    monkeypatch.setattr(run_history, "RUNS_DIR", tmp_path / "runs")
++    monkeypatch.setattr(run_history, "LIVE_MODEL", tmp_path / "live" / "model.pkl")
++    monkeypatch.setattr(run_history, "LIVE_REPORT", tmp_path / "live" / "report.json")
++
++    engine = create_engine(f"sqlite:///{tmp_path / 'main.db'}")
++
++    @event.listens_for(engine, "connect")
++    def attach_schema(connection, _):
++        connection.execute(f"ATTACH DATABASE '{tmp_path / 'marts.db'}' AS {SCHEMA}")
++
++    saved_tables = {}
++    monkeypatch.setattr(rs, "get_engine", lambda: engine)
++    monkeypatch.setattr(rs, "marts_schema", lambda: SCHEMA)
++    monkeypatch.setattr(rs, "load_suitability_features", lambda: make_frame())
++    monkeypatch.setattr(rs, "save_predictions", lambda frame, name: saved_tables.update({name: frame}))
++    monkeypatch.setattr(rs, "build_explanations", lambda df, contributions, top_k: pd.DataFrame({"x": [1]}))
++    monkeypatch.setattr(rs, "fit_final_model", lambda df: "stand-in model")
++
++    def pretend_training(results):
++        scored = make_frame()[["city", "species", ts.LABEL]].assign(model_score=0.5)
++        monkeypatch.setattr(rs, "train_and_evaluate", lambda df: (scored, None, results))
++
++    return engine, saved_tables, pretend_training
++
++
++def test_an_accepted_run_goes_live_and_replaces_the_scores(workspace):
++    engine, saved_tables, pretend_training = workspace
++    pretend_training(results_with())
++
++    assert rs.retrain() == 0
++
++    assert run_history.live_results()["status"] == "accepted"
++    assert set(saved_tables) == {"ml_species_city_suitability", "ml_species_city_explanations"}
++    assert run_history.LIVE_MODEL.exists()
++    assert run_history.last_accepted_fingerprint(engine, SCHEMA) == data_checks.data_fingerprint(make_frame())
++
++
++def test_a_rejected_run_is_kept_but_the_live_model_and_scores_stay_untouched(workspace):
++    engine, saved_tables, pretend_training = workspace
++    pretend_training(results_with(model_auc=0.80))
++    assert rs.retrain() == 0
++    live_before = run_history.LIVE_REPORT.read_text()
++    saved_tables.clear()
++
++    pretend_training(results_with(model_auc=0.60))          # clearly worse
++    assert rs.retrain(force=True) == 1
++
++    assert run_history.LIVE_REPORT.read_text() == live_before
++    assert saved_tables == {}
++    statuses = pd.read_sql(f"SELECT status FROM {SCHEMA}.ml_training_runs ORDER BY run_id", engine)["status"]
++    assert list(statuses) == ["accepted", "rejected"]
++    rejected_folder = sorted(run_history.RUNS_DIR.iterdir())[-1]
++    assert json.loads((rejected_folder / "report.json").read_text())["status"] == "rejected"
++
++
++def test_unchanged_data_is_not_retrained_unless_forced(workspace):
++    _, saved_tables, pretend_training = workspace
++    pretend_training(results_with())
++    assert rs.retrain() == 0
++    saved_tables.clear()
++
++    assert rs.retrain() == 0
++    assert saved_tables == {}                                # skipped: nothing republished
++    assert len(list(run_history.RUNS_DIR.iterdir())) == 1
++
++    assert rs.retrain(force=True) == 0
++    assert len(list(run_history.RUNS_DIR.iterdir())) == 2
++
++
++def test_unhealthy_data_stops_the_run_before_any_training(workspace, monkeypatch):
++    _, saved_tables, _ = workspace
++    monkeypatch.setattr(rs, "load_suitability_features", lambda: make_frame(n_cities=3))
++    monkeypatch.setattr(rs, "train_and_evaluate", lambda df: pytest.fail("must not train on unhealthy data"))
++
++    assert rs.retrain() == 1
++    assert saved_tables == {}
++    assert not run_history.RUNS_DIR.exists()
++
++
++def test_no_history_table_yet_means_no_previous_fingerprint(workspace):
++    engine, _, _ = workspace
++    assert run_history.last_accepted_fingerprint(engine, SCHEMA) is None
+diff --git a/tests/api/test_api.py b/tests/api/test_api.py
+index f358642..ff6ca4e 100644
+--- a/tests/api/test_api.py
++++ b/tests/api/test_api.py
+@@ -34,6 +34,8 @@ CREATE TABLE mart_plant_profiles (species, common_name, family, functional_group
+ CREATE TABLE mart_city_companions (city, pair_rank, species_a, species_b, mechanism, benefit_category,
+   evidence_level, relationship_score, relationship, notes, evidence_source, source_url);
+ CREATE TABLE ml_species_city_suitability (city, species, observed_nearby, suitability_score, rank_in_city);
++CREATE TABLE ml_training_runs (run_id, trained_at, status, rejected_because, data_fingerprint, rows_used, cities,
++  model_auc, best_baseline, gain_over_baseline_auc, gain_range_low, gain_range_high, top_n_hit_rate);
+ CREATE TABLE ml_species_city_explanations (city, species, reason_rank, feature, feature_label, feature_value,
+   effect, contribution, reason);
+ """
+@@ -209,6 +211,23 @@ def test_model_info_reports_the_verdict_and_caveats(client):
+     assert body["caveats"]
+ 
+ 
++def test_training_history_lists_newest_run_first(client):
++    with client.app.state.engine.begin() as c:
++        c.execute(text("""INSERT INTO ml_training_runs (run_id, trained_at, status, rejected_because, model_auc,
++            gain_over_baseline_auc) VALUES
++            ('2026-10-04_09-00-00-100','2026-10-04T09:00:00','accepted','',0.80,0.05),
++            ('2026-10-11_09-00-00-100','2026-10-11T09:00:00','rejected','The model does not beat the baseline',0.70,-0.01)"""))
++    runs = client.get("/model/runs").json()
++    assert [r["status"] for r in runs] == ["rejected", "accepted"]
++    assert "does not beat" in runs[0]["rejected_because"]
++
++
++def test_training_history_is_empty_before_the_first_run(client):
++    with client.app.state.engine.begin() as c:
++        c.execute(text("DROP TABLE ml_training_runs"))
++    assert client.get("/model/runs").json() == []
++
++
+ def test_missing_table_gives_503_without_leaking_sql(client):
+     with client.app.state.engine.begin() as c:
+         c.execute(text("DROP TABLE ml_species_city_suitability"))
+-- 
+2.43.0
+

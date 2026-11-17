@@ -1,0 +1,203 @@
+From d8ed91af02cf668eb4627928d24958b07f3caa18 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 22:51:38 +0300
+Subject: [PATCH] Suitability table: use a tighter 100 km label radius
+
+On production data the model's gain over the best simple baseline is only reliable at 100 km
+(+0.083 AUC, 95% range +0.029 to +0.136), not at 500 km (+0.036, range -0.021 to +0.094),
+because a 500 km circle spans several climates.
+
+- new setting suitability_radius_km: 100 (species_radius_km stays 500 for the older marts)
+- crop search moved into macro city_species_presence(radius_km), used by both
+  int_city_species_presence and mart_species_city_suitability (old output verified identical)
+- cities with no recorded crop inside the circle are left out of the suitability table
+- docs and glossary updated
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ dbt/dbt_project.yml                           |  3 ++
+ dbt/macros/city_species_presence.sql          | 35 +++++++++++++++++++
+ .../int_city_species_presence.sql             | 29 +--------------
+ .../marts/mart_species_city_suitability.sql   | 13 ++++---
+ dbt/models/marts/schema.yml                   |  5 +--
+ docs/DATA_GLOSSARY.md                         |  2 +-
+ 6 files changed, 52 insertions(+), 35 deletions(-)
+ create mode 100644 dbt/macros/city_species_presence.sql
+
+diff --git a/dbt/dbt_project.yml b/dbt/dbt_project.yml
+index 96e8415..296af26 100644
+--- a/dbt/dbt_project.yml
++++ b/dbt/dbt_project.yml
+@@ -29,6 +29,9 @@ clean-targets: ["target", "dbt_packages"]
+ vars:
+   # A species counts as "near" a city if it was observed within this many km.
+   species_radius_km: 500
++  # The species-by-city suitability table uses a tighter circle, so a recorded crop is
++  # more likely to reflect that city's own conditions (500 km spans several climates).
++  suitability_radius_km: 100
+ 
+ # - MODEL CONFIGURATIONS
+ # Defines how each layer materialises in Postgres.
+diff --git a/dbt/macros/city_species_presence.sql b/dbt/macros/city_species_presence.sql
+new file mode 100644
+index 0000000..ca39cdd
+--- /dev/null
++++ b/dbt/macros/city_species_presence.sql
+@@ -0,0 +1,35 @@
++{# Crops recorded near each city, by month: one row per city x month x species.
++   A GBIF observation counts for a city if it was made within `radius_km` of the city centre.
++   Only species that have a row in dim_plant_traits are counted, so weeds and wild plants are ignored.
++   The radius is an argument because two models use it differently:
++   int_city_species_presence uses the wide `species_radius_km` (500 km) and
++   mart_species_city_suitability uses the local `suitability_radius_km` (100 km). #}
++{% macro city_species_presence(radius_km) %}
++    WITH cities AS (
++        SELECT city, latitude, longitude FROM {{ ref('int_location_profile') }}
++    ),
++
++    crops AS (
++        SELECT
++            p.species,
++            p.family,
++            p.month,
++            p.latitude,
++            p.longitude
++        FROM {{ ref('stg_plants') }} p
++        JOIN {{ ref('dim_plant_traits') }} t
++            ON LOWER(TRIM(p.species)) = LOWER(TRIM(t.species))
++        WHERE p.month IS NOT NULL
++    )
++
++    SELECT
++        c.city,
++        o.month,
++        o.species,
++        MAX(o.family) AS family,
++        COUNT(*)      AS observation_count
++    FROM cities c
++    JOIN crops o
++        ON {{ distance_km('c.latitude', 'c.longitude', 'o.latitude', 'o.longitude') }} <= {{ radius_km }}
++    GROUP BY c.city, o.month, o.species
++{% endmacro %}
+diff --git a/dbt/models/intermediate/int_city_species_presence.sql b/dbt/models/intermediate/int_city_species_presence.sql
+index 2fa2da8..7ec4b78 100644
+--- a/dbt/models/intermediate/int_city_species_presence.sql
++++ b/dbt/models/intermediate/int_city_species_presence.sql
+@@ -10,31 +10,4 @@
+ 
+ {{ config(materialized='view') }}
+ 
+-WITH cities AS (
+-    SELECT city, latitude, longitude FROM {{ ref('int_location_profile') }}
+-),
+-
+-crops AS (
+-    SELECT
+-        p.species,
+-        p.family,
+-        p.month,
+-        p.latitude,
+-        p.longitude
+-    FROM {{ ref('stg_plants') }} p
+-    JOIN {{ ref('dim_plant_traits') }} t
+-        ON LOWER(TRIM(p.species)) = LOWER(TRIM(t.species))
+-    WHERE p.month IS NOT NULL
+-)
+-
+-SELECT
+-    c.city,
+-    o.month,
+-    o.species,
+-    MAX(o.family) AS family,
+-    COUNT(*)      AS observation_count
+-FROM cities c
+-JOIN crops o
+-    ON {{ distance_km('c.latitude', 'c.longitude', 'o.latitude', 'o.longitude') }}
+-       <= {{ var('species_radius_km') }}
+-GROUP BY c.city, o.month, o.species
++{{ city_species_presence(var('species_radius_km')) }}
+diff --git a/dbt/models/marts/mart_species_city_suitability.sql b/dbt/models/marts/mart_species_city_suitability.sql
+index 3bb800f..d5e3fe9 100644
+--- a/dbt/models/marts/mart_species_city_suitability.sql
++++ b/dbt/models/marts/mart_species_city_suitability.sql
+@@ -5,7 +5,8 @@
+ -- and every species in dim_plant_traits.
+ --
+ -- LABEL  observed_nearby = 1 when the species was recorded by GBIF within
+---        `species_radius_km` of the city (see int_city_species_presence), else 0.
++--        `suitability_radius_km` (default 100 km, set in dbt_project.yml) of the city, else 0.
++--        Cities with no recorded crop inside that circle are left out: they have no labels to learn from.
+ --        This is where people recorded the crop, not a measurement of how well it
+ --        grows. A 0 can also mean "nobody recorded it", so treat the label as a
+ --        proxy for suitability.
+@@ -22,7 +23,11 @@
+ 
+ {{ config(materialized='table') }}
+ 
+-WITH cities AS (
++WITH presence AS (
++    {{ city_species_presence(var('suitability_radius_km')) }}
++),
++
++cities AS (
+     SELECT
+         city, country, latitude, longitude,
+         soil_ph, clay_pct, nitrogen_g_kg,
+@@ -31,7 +36,7 @@ WITH cities AS (
+     FROM {{ ref('mart_ml_annual_features') }}
+     WHERE soil_ph IS NOT NULL
+       AND frost_zone IS NOT NULL
+-      AND city IN (SELECT DISTINCT city FROM {{ ref('int_city_species_presence') }})
++      AND city IN (SELECT DISTINCT city FROM presence)
+ ),
+ 
+ crops AS (
+@@ -80,7 +85,7 @@ monthly_fit AS (
+ 
+ observations AS (
+     SELECT city, species, SUM(observation_count) AS observation_count
+-    FROM {{ ref('int_city_species_presence') }}
++    FROM presence
+     GROUP BY city, species
+ ),
+ 
+diff --git a/dbt/models/marts/schema.yml b/dbt/models/marts/schema.yml
+index 8f01cba..ff81366 100644
+--- a/dbt/models/marts/schema.yml
++++ b/dbt/models/marts/schema.yml
+@@ -111,7 +111,8 @@ models:
+   - name: mart_species_city_suitability
+     description: >
+       ML Feature Table C. One row per crop species and city: "does this crop suit this city?"
+-      Covers every city with usable soil pH and frost data, and every species in dim_plant_traits.
++      Covers every city with usable soil pH and frost data and at least one recorded crop within
++      suitability_radius_km (default 100 km), and every species in dim_plant_traits.
+       The label observed_nearby says whether the crop was recorded near the city; it is a proxy
+       for suitability, not a measurement of how well the crop grows.
+       The fit-check columns compare what the crop needs with what the city offers, using plain
+@@ -131,7 +132,7 @@ models:
+         tests:
+           - not_null
+       - name: observed_nearby
+-        description: 1 if the crop was recorded within the search radius of the city, otherwise 0. This is the ML label.
++        description: 1 if the crop was recorded within suitability_radius_km (default 100 km) of the city, otherwise 0. This is the ML label.
+         tests:
+           - not_null
+           - accepted_values:
+diff --git a/docs/DATA_GLOSSARY.md b/docs/DATA_GLOSSARY.md
+index 56fa449..20b8926 100644
+--- a/docs/DATA_GLOSSARY.md
++++ b/docs/DATA_GLOSSARY.md
+@@ -16,7 +16,7 @@ Plain-language meaning of the main columns in the warehouse and the ML tables.
+ | Current conditions score | 100 minus penalties for today's frost (30), heat (20), severe/moderate water stress (20/10), low soil nitrogen (10) and flood risk (10). A snapshot of today. |
+ | Relationship score | Companion pair points (+3 beneficial, +1 neutral, -5 antagonistic) times evidence (x3 scientific, x2 traditional, x1 anecdotal). |
+ | Soil fertility points | 0-4: nitrogen at least 1.0 g/kg, organic carbon at least 10 g/kg, pH 6-7, loam/clay loam/silty texture. |
+-| Observed nearby | 1 if a crop was recorded within the search radius of a city, otherwise 0. The label of the species-by-city model (`mart_species_city_suitability`). A 0 can also mean nobody recorded the crop. |
++| Observed nearby | 1 if a crop was recorded within 100 km of a city (setting `suitability_radius_km`), otherwise 0. The label of the species-by-city model (`mart_species_city_suitability`). A 0 can also mean nobody recorded the crop. The older marts keep the wider 500 km circle. |
+ | Trait fit share | Share of three plain checks a crop passes in a city: enough months in its optimal temperature range to mature, enough frost-free months (or frost hardy), and soil pH inside its optimal range. A check that cannot be worked out is left out, never assumed. |
+ | Suitability score | Probability from the species-by-city model that a crop is recorded near a city. Always scored by a model that was trained without that city. |
+ 
+-- 
+2.43.0
+
