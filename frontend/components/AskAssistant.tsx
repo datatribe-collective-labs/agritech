@@ -6,7 +6,8 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 // The assistant client and its helpers.
 import {
-  AI_NOTICE, AssistantError, MAX_QUESTION_CHARS, Message, askQuestion, endSession, failureMessage, startSession, suggestionsFor,
+  AI_NOTICE, AssistantError, FEEDBACK_REASONS, FeedbackReason, MAX_QUESTION_CHARS, Message, Rating,
+  askQuestion, endSession, failureMessage, feedbackHint, sendFeedback, startSession, suggestionsFor,
 } from "@/lib/assistant";
 
 // What the page tells us: the city, the crop (if any) and a short label for the panel title.
@@ -116,7 +117,7 @@ export function AskAssistant({ city, species, about }: Props) {
       // Ask the assistant.
       const reply = await askQuestion(id, text);
       // Show its answer.
-      setMessages((m) => [...m, { role: "assistant", text: reply.answer }]);
+      setMessages((m) => [...m, { role: "assistant", text: reply.answer, turn: reply.turn ?? undefined }]);
     } catch (error) {
       // Pick the kind of failure, defaulting to "unavailable".
       const kind = error instanceof AssistantError ? error.kind : "unavailable";
@@ -132,6 +133,24 @@ export function AskAssistant({ city, species, about }: Props) {
     } finally {
       // Stop the "thinking" state.
       setBusy(false);
+    }
+  }
+
+  // Save a thumbs up or down on one answer. Best effort: a failed rating never interrupts the chat.
+  async function rate(index: number, rating: Rating, reason?: FeedbackReason) {
+    // The answer being rated and the chat it belongs to.
+    const target = messages[index];
+    const id = sessionRef.current;
+    // Nothing to rate without both.
+    if (!target || target.turn === undefined || !id) return;
+    // Show the rating straight away.
+    setMessages((m) => m.map((x, i) => (i === index ? { ...x, rating } : x)));
+    // Tell the server, and ignore any failure: the chat carries on either way.
+    try {
+      // Send the rating.
+      await sendFeedback(id, target.turn, rating, reason);
+    } catch {
+      // Rating is optional, so there is nothing to show.
     }
   }
 
@@ -203,11 +222,34 @@ export function AskAssistant({ city, species, about }: Props) {
             )}
             {/* Each message, styled by who wrote it. */}
             {messages.map((m, i) => (
-              <p key={i} className={`assistant-msg ${m.role}`}>
-                {/* Screen readers hear who is speaking. */}
-                <span className="sr-only">{m.role === "farmer" ? "You: " : "Assistant: "}</span>
-                {m.text}
-              </p>
+              <div key={i} className={`assistant-turn ${m.role}`}>
+                <p className={`assistant-msg ${m.role}`}>
+                  {/* Screen readers hear who is speaking. */}
+                  <span className="sr-only">{m.role === "farmer" ? "You: " : "Assistant: "}</span>
+                  {m.text}
+                </p>
+                {/* A quiet, optional rating under answers that can be rated. It never blocks the chat. */}
+                {m.role === "assistant" && m.turn !== undefined && (
+                  <div className="assistant-rate" role="group" aria-label="Rate this answer (optional)">
+                    {/* Tells the farmer rating is optional and the chat goes on. */}
+                    <span className="assistant-rate-hint small">{feedbackHint(m.rating)}</span>
+                    {/* Two small buttons; the chosen one stays highlighted and both stay usable. */}
+                    <button type="button" className="assistant-thumb" aria-pressed={m.rating === "up"}
+                      aria-label="Helpful" onClick={() => void rate(i, "up")}>👍</button>
+                    <button type="button" className="assistant-thumb" aria-pressed={m.rating === "down"}
+                      aria-label="Not helpful" onClick={() => void rate(i, "down")}>👎</button>
+                    {/* After a thumbs down: optional tappable reasons. */}
+                    {m.rating === "down" && (
+                      <span className="assistant-reasons">
+                        {FEEDBACK_REASONS.map((r) => (
+                          <button key={r.value} type="button" className="assistant-chip small"
+                            onClick={() => void rate(i, "down", r.value)}>{r.label}</button>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
             {/* Shown while we wait for the answer. */}
             {busy && <p className="assistant-msg assistant muted">Thinking…</p>}

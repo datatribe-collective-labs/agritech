@@ -3,7 +3,7 @@
 // Test tools.
 import { afterEach, describe, expect, it, vi } from "vitest";
 // The code under test.
-import { AssistantError, askQuestion, failureMessage, startSession, suggestionsFor } from "./assistant";
+import { AssistantError, FEEDBACK_REASONS, askQuestion, failureMessage, feedbackHint, sendFeedback, startSession, suggestionsFor } from "./assistant";
 
 // Put the real fetch back after every test.
 afterEach(() => vi.unstubAllGlobals());
@@ -89,5 +89,43 @@ describe("assistant calls", () => {
       // No raw numbers like 429.
       expect(failureMessage(kind)).not.toMatch(/\d{3}/);
     }
+  });
+});
+
+// Tests about rating answers.
+describe("rating answers", () => {
+  // The rating sends only ids and fixed choices, never any text from the page.
+  it("sends only the chat id, answer number, rating and a tapped reason", async () => {
+    // The server says it saved the rating.
+    const fake = stubFetch(200, { saved: true });
+    // Rate the first answer down with a reason.
+    await sendFeedback("abc", 0, "down", "unclear");
+    // The request went to the feedback address.
+    expect(fake.mock.calls[0][0]).toContain("/feedback");
+    // The body holds just those four values.
+    expect(JSON.parse(fake.mock.calls[0][1].body)).toEqual({ session_id: "abc", turn: 0, rating: "down", reason: "unclear" });
+  });
+
+  // A failed rating is reported like any other failure so the page can ignore it.
+  it("reports a missing chat as gone", async () => {
+    // The chat no longer exists.
+    stubFetch(404);
+    // The error says so.
+    await expect(sendFeedback("abc", 0, "up")).rejects.toMatchObject({ kind: "gone" });
+  });
+
+  // Rating must never read like the end of the conversation.
+  it("always tells the farmer the chat is still open and rating is optional", () => {
+    // Before rating it says optional and keep asking.
+    expect(feedbackHint(undefined)).toMatch(/optional/i);
+    // After either rating it says the chat is still open.
+    expect(feedbackHint("up")).toMatch(/still open/i);
+    expect(feedbackHint("down")).toMatch(/still open/i);
+  });
+
+  // The reasons are fixed choices the server accepts.
+  it("offers only the reasons the server accepts", () => {
+    // The same four values as the server.
+    expect(FEEDBACK_REASONS.map((r) => r.value).sort()).toEqual(["off_topic", "other", "unclear", "wrong"]);
   });
 });
