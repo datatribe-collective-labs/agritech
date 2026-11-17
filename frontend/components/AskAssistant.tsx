@@ -100,8 +100,8 @@ export function AskAssistant({ city, species, about }: Props) {
     const text = question.trim();
     // Ignore empty questions and double sends.
     if (!text || busy) return;
-    // Show the farmer's question straight away.
-    setMessages((m) => [...m, { role: "farmer", text }]);
+    // Show the farmer's question straight away, and tuck away any open "what was wrong?" choices.
+    setMessages((m) => [...m.map((x) => ({ ...x, reasonOpen: false })), { role: "farmer", text }]);
     // Remember it, so a tappable copy is not offered again.
     setAsked((a) => [...a, text]);
     // Clear the typing box.
@@ -143,8 +143,12 @@ export function AskAssistant({ city, species, about }: Props) {
     const id = sessionRef.current;
     // Nothing to rate without both.
     if (!target || target.turn === undefined || !id) return;
-    // Show the rating straight away.
-    setMessages((m) => m.map((x, i) => (i === index ? { ...x, rating } : x)));
+    // Show the rating straight away. The reasons open on a thumbs down (or when it is tapped again)
+    // and close once a reason is chosen or the farmer taps thumbs up.
+    setMessages((m) => m.map((x, i) => (i !== index ? x : {
+      ...x, rating, reason: reason ?? x.reason,
+      reasonOpen: rating === "down" && !reason && !(x.rating === "down" && x.reasonOpen),
+    })));
     // Tell the server, and ignore any failure: the chat carries on either way.
     try {
       // Send the rating.
@@ -239,8 +243,10 @@ export function AskAssistant({ city, species, about }: Props) {
                     <button type="button" className="assistant-thumb" aria-pressed={m.rating === "down"}
                       aria-label="Not helpful" onClick={() => void rate(i, "down")}>👎</button>
                     {/* After a thumbs down: optional tappable reasons. */}
-                    {m.rating === "down" && (
+                    {m.rating === "down" && m.reasonOpen && (
                       <span className="assistant-reasons">
+                        {/* Short label so the choices make sense on their own. */}
+                        <span className="small">What was wrong?</span>
                         {FEEDBACK_REASONS.map((r) => (
                           <button key={r.value} type="button" className="assistant-chip small"
                             onClick={() => void rate(i, "down", r.value)}>{r.label}</button>
