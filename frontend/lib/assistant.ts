@@ -12,14 +12,30 @@ export const MAX_QUESTION_CHARS = 500;
 // What the chat is about: a city, or a crop inside a city.
 export type Subject = { city: string; species?: string };
 
+// Thumbs up or down on one answer.
+export type Rating = "up" | "down";
+
+// Why an answer got a thumbs down (tapped, never typed). The server accepts only these values.
+export type FeedbackReason = "wrong" | "unclear" | "off_topic" | "other";
+
+// The words shown for each reason.
+export const FEEDBACK_REASONS: { value: FeedbackReason; label: string }[] = [
+  { value: "wrong", label: "The facts look wrong" },
+  { value: "unclear", label: "Hard to understand" },
+  { value: "off_topic", label: "Not what I asked" },
+  { value: "other", label: "Something else" },
+];
+
 // One line in the conversation, written by the farmer or by the assistant.
-export type Message = { role: "farmer" | "assistant"; text: string };
+// An assistant line may carry its place in the chat (turn) and the rating the farmer gave it.
+export type Message = { role: "farmer" | "assistant"; text: string; turn?: number; rating?: Rating };
 
 // What the server returns when a chat starts.
 export type Started = { session_id: string; notice: string };
 
 // What the server returns for a question.
-export type Reply = { answer: string; refused: boolean };
+// turn is the answer's place in the chat (0 is the first), or null when it cannot be rated.
+export type Reply = { answer: string; refused: boolean; turn: number | null };
 
 // The three ways a call can fail, in words the page can turn into a friendly message.
 export type FailureKind = "busy" | "gone" | "unavailable";
@@ -88,6 +104,29 @@ export function askQuestion(sessionId: string, question: string): Promise<Reply>
     // Chat id and the question text.
     body: JSON.stringify({ session_id: sessionId, question }),
   });
+}
+
+// Save a thumbs up or down on one answer. The chat stays open; rating never ends it.
+export function sendFeedback(sessionId: string, turn: number, rating: Rating, reason?: FeedbackReason): Promise<{ saved: boolean }> {
+  // Only ids and fixed choices are sent; the server already holds the question and answer.
+  return call<{ saved: boolean }>("/feedback", {
+    // Saving a rating is a POST.
+    method: "POST",
+    // The body is JSON.
+    headers: JSON_HEADERS,
+    // Chat id, answer number, rating and the optional tapped reason.
+    body: JSON.stringify({ session_id: sessionId, turn, rating, reason: reason ?? "" }),
+  });
+}
+
+// What to say under an answer, so rating never feels like the end of the conversation.
+export function feedbackHint(rating: Rating | undefined): string {
+  // Before any rating: optional, and the chat goes on.
+  if (!rating) return "Was this helpful? Optional - you can keep asking either way.";
+  // After a thumbs up.
+  if (rating === "up") return "Thanks! Your chat is still open - ask anything else.";
+  // After a thumbs down.
+  return "Thanks for telling us. Your chat is still open - ask anything else.";
 }
 
 // Delete a chat (the farmer's "forget this" button, also used when leaving the page).

@@ -21,11 +21,13 @@ class ReviewQueue:
         # Lock so two requests do not interleave their lines.
         self._lock = threading.Lock()
 
-    def add(self, question: str, answer: str, problems: list, card: dict) -> None:
-        """Queue one case for review."""
+    # Queue one case; source and reason are optional so older callers keep working.
+    def add(self, question: str, answer: str, problems: list, card: dict,
+            source: str = "checks", reason: str = "") -> None:
+        """Queue one case for review. source says who raised it: 'checks' (our rails) or 'farmer' (thumbs down)."""
         # What a reviewer needs to see.
-        entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "question": question,
-                 "answer": answer, "problems": problems, "card": card}
+        entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "source": source, "reason": reason,
+                 "question": question, "answer": answer, "problems": problems, "card": card}
         # Append safely.
         with self._lock, open(self.path, "a", encoding="utf-8") as handle:
             # One JSON object per line.

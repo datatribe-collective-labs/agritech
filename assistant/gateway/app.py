@@ -7,6 +7,9 @@ Caddy sends /assistant/* here; the planting API stays private.
 # Lets us describe types before they are defined.
 from __future__ import annotations
 
+# Fixed choices for the rating.
+from typing import Literal
+
 # Web framework pieces.
 from fastapi import FastAPI, Header, HTTPException, Request
 # Browser access rules.
@@ -36,6 +39,19 @@ class StartRequest(BaseModel):
     city: str = Field(min_length=1, max_length=80)
     # Optional crop (scientific name) the farmer is looking at.
     species: str = Field(default="", max_length=80)
+
+
+class FeedbackRequest(BaseModel):
+    """Body for rating one answer. No free text: the server already holds the question and answer."""
+
+    # Which chat.
+    session_id: str = Field(min_length=1, max_length=64)
+    # Which answer in the chat (0 is the first).
+    turn: int = Field(ge=0, le=1000)
+    # Thumbs up or down.
+    rating: Literal["up", "down"]
+    # Optional tapped reason for a thumbs down.
+    reason: Literal["", "wrong", "off_topic", "unclear", "other"] = ""
 
 
 class ChatRequest(BaseModel):
@@ -110,7 +126,25 @@ def create_app(settings: Settings = None, service: AssistantService = None) -> F
         answer = service.ask(identity, body.session_id, body.question)
         # Return only what the page needs.
         return {"answer": answer.text, "sources": answer.sources, "cached": answer.cached,
-                "refused": answer.blocked_reason is not None, "notice": AI_NOTICE}
+                "refused": answer.blocked_reason is not None, "notice": AI_NOTICE, "turn": answer.turn}
+
+    @app.post("/assistant/feedback")
+    def feedback(body: FeedbackRequest, request: Request, x_assistant_key: str = Header(default="")):
+        """Save a thumbs up or down. The chat stays open and keeps working."""
+        # Who is rating.
+        identity = who(request, x_assistant_key)
+        # Own allowance, so rating never uses up the farmer's question allowance.
+        allowed, wait = limiter.allow(identity.user_id + ":feedback", 3 * LIMIT_MULTIPLIER.get(identity.tier, 1))
+        # Too many ratings.
+        if not allowed:
+            # Tell the caller when to retry.
+            raise HTTPException(429, "Too many ratings. Try again shortly.", headers={"Retry-After": str(wait)})
+        # Save it (the owner check happens inside).
+        if not service.give_feedback(identity, body.session_id, body.turn, body.rating, body.reason):
+            # Same answer for missing and not-yours.
+            raise HTTPException(404, "No such answer.")
+        # Report success.
+        return {"saved": True}
 
     @app.delete("/assistant/sessions/{session_id}")
     def forget(session_id: str, request: Request, x_assistant_key: str = Header(default="")):

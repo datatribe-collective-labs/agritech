@@ -136,8 +136,8 @@ class AssistantService:
                 self.metrics.inc("cache_hits")
                 # Remember the turn.
                 self.sessions.add_turn(session, checked.text, cached.text)
-                # Serve the stored answer.
-                return Answer(cached.text, cached.sources, cached=True)
+                # Serve the stored answer, noting its place in the chat so it can be rated.
+                return Answer(cached.text, cached.sources, cached=True, turn=len(session.turns) - 1)
         # Rule 5: run the agent with the model the router picks.
         model = choose_model(checked.text, self.settings.llm_model_small, self.settings.llm_model_large)
         # Run the agent.
@@ -154,6 +154,8 @@ class AssistantService:
             self.cache.put(key, answer)
         # Remember the turn, record cost and trace.
         self.sessions.add_turn(session, checked.text, answer.text)
+        # Note the answer's place in the chat so the farmer can rate it.
+        answer.turn = len(session.turns) - 1
         # Count tokens.
         self.metrics.inc("tokens", answer.tokens)
         # Estimate the cost.
@@ -164,6 +166,38 @@ class AssistantService:
                            int((time.time() - started) * 1000))
         # Return the answer.
         return answer
+
+    def give_feedback(self, identity: Identity, session_id: str, turn: int, rating: str, reason: str = "") -> bool:
+        """Save a thumbs up or down on one answer. False when the chat or answer cannot be found.
+
+        Rating never ends or changes the chat. A thumbs down is also queued for a person to read.
+        """
+        # Only the chat's owner may rate its answers.
+        session = self.sessions.get(session_id, identity.user_id)
+        # Unknown chat, or someone else's.
+        if session is None or not 0 <= turn < len(session.turns):
+            # Nothing to rate.
+            return False
+        # The question and answer being rated, as stored on the server (the browser sends no text).
+        entry = session.turns[turn]
+        # What this answer was rated before (None when never rated).
+        before = entry.get("feedback")
+        # Keep only the latest rating, so tapping twice never double counts.
+        entry["feedback"] = rating
+        # Count it once per change.
+        if before != rating:
+            # Counter for the dashboard.
+            self.metrics.inc(f"feedback_{rating}")
+        # A thumbs down goes to a person, once per answer.
+        if rating == "down" and before != "down":
+            # Queue it, marked as raised by the farmer.
+            self.review_queue.add(entry["q"], entry["a"], [], session.card, source="farmer", reason=reason)
+        # Remember a reason given later for an answer already marked down.
+        elif rating == "down" and reason:
+            # Add the reason to the queue as an update line.
+            self.review_queue.add(entry["q"], entry["a"], [], session.card, source="farmer", reason=reason)
+        # Saved.
+        return True
 
 
 def _known_crops(api: ApiClient) -> set:

@@ -83,3 +83,5 @@ class Answer:
     tokens: int = 0
     # Problems the answer checks found (empty when the answer passed).
     problems: list = field(default_factory=list)
+    # Position of this answer in its chat (0 for the first), used to attach a rating. None when nothing was saved.
+    turn: Optional[int] = None

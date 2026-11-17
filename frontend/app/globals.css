@@ -351,3 +351,12 @@ a:hover { color: var(--leaf); }
 .assistant-input { flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--line); background: var(--chalk); color: var(--ink); font: inherit; }
 /* Small text button to delete the chat. */
 .assistant-forget { align-self: flex-start; border: 0; background: transparent; color: var(--ink-soft); text-decoration: underline; font: inherit; font-size: .9rem; padding: 6px 0; cursor: pointer; }
+
+/* Optional rating row under an answer: small and quiet so it never looks like a required step. */
+.assistant-turn { display: flex; flex-direction: column; gap: 4px; }
+.assistant-turn.farmer { align-items: flex-end; }
+.assistant-rate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); }
+.assistant-rate-hint { margin-right: 4px; }
+.assistant-thumb { border: 1.5px solid var(--line); background: transparent; border-radius: 999px; min-width: 36px; min-height: 36px; cursor: pointer; font-size: 1rem; }
+.assistant-thumb[aria-pressed="true"] { background: var(--leaf-tint); border-color: var(--leaf-deep); }
+.assistant-reasons { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }

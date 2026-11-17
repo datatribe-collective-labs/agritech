@@ -64,3 +64,11 @@ Claude Desktop config (set `ASSISTANT_API_BASE_URL` to the API address):
 {"mcpServers": {"planting": {"command": "python", "args": ["-m", "assistant.mcp_server"],
   "env": {"ASSISTANT_API_BASE_URL": "https://94-237-15-238.sslip.io"}}}}
 ```
+
+## Rating answers (thumbs up/down)
+
+Each saved answer carries a `turn` number. The chat panel shows two small optional buttons under it, and tells the
+farmer that rating is optional and the chat stays open. `POST /assistant/feedback` takes only the chat id, the turn,
+`up`/`down` and an optional tapped reason (`wrong`, `unclear`, `off_topic`, `other`). The server looks up the question
+and answer itself, so no text comes from the browser. A thumbs down is added to the review queue with
+`"source": "farmer"`; answers that failed our own checks are marked `"source": "checks"`. Counters: `feedback_up`, `feedback_down`.
