@@ -28,7 +28,10 @@ export const FEEDBACK_REASONS: { value: FeedbackReason; label: string }[] = [
 
 // One line in the conversation, written by the farmer or by the assistant.
 // An assistant line may carry its place in the chat (turn) and the rating the farmer gave it.
-export type Message = { role: "farmer" | "assistant"; text: string; turn?: number; rating?: Rating };
+// reasonOpen is true only while the "what was wrong?" choices are showing; reason is the one tapped.
+export type Message = {
+  role: "farmer" | "assistant"; text: string; turn?: number; rating?: Rating; reason?: FeedbackReason; reasonOpen?: boolean;
+};
 
 // What the server returns when a chat starts.
 export type Started = { session_id: string; notice: string };

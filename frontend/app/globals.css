@@ -338,11 +338,15 @@ a:hover { color: var(--leaf); }
 .assistant-msg.farmer { align-self: flex-end; background: var(--leaf-deep); color: #fff; }
 .assistant-msg.assistant { align-self: flex-start; background: var(--chalk); border: 1.5px solid var(--line); }
 .assistant-problem { margin: 0; color: var(--warn); font-weight: 600; }
-/* Tappable questions wrap onto several lines. */
-.assistant-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+/* Tappable questions sit in ONE row that scrolls sideways, so they never crowd out the conversation. */
+.assistant-chips {
+  list-style: none; margin: 0; padding: 0 0 4px; display: flex; flex-wrap: nowrap; gap: 8px; flex-shrink: 0;
+  overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+}
+.assistant-chips li { flex: 0 0 auto; }
 .assistant-chip {
   min-height: 40px; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--leaf); background: transparent;
-  color: var(--leaf-deep); font: 600 .92rem var(--body); cursor: pointer; text-align: left;
+  color: var(--leaf-deep); font: 600 .92rem var(--body); cursor: pointer; text-align: left; white-space: nowrap;
 }
 .assistant-chip:hover:not(:disabled) { background: var(--leaf-tint); }
 .assistant-chip:disabled { opacity: .5; cursor: default; }
@@ -359,4 +363,16 @@ a:hover { color: var(--leaf); }
 .assistant-rate-hint { margin-right: 4px; }
 .assistant-thumb { border: 1.5px solid var(--line); background: transparent; border-radius: 999px; min-width: 36px; min-height: 36px; cursor: pointer; font-size: 1rem; }
 .assistant-thumb[aria-pressed="true"] { background: var(--leaf-tint); border-color: var(--leaf-deep); }
-.assistant-reasons { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.assistant-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+.assistant-reasons .assistant-chip { min-height: 34px; padding: 4px 11px; font-size: .85rem; white-space: normal; }
+/* Fingers need bigger targets than mice. */
+@media (pointer: coarse) { .assistant-thumb { min-width: 44px; min-height: 44px; } .assistant-reasons .assistant-chip { min-height: 40px; } }
+/* Keep the message list a usable size, and the sheet clear of phone bars and the keyboard. */
+.assistant-messages { min-height: 120px; overscroll-behavior: contain; }
+.assistant-panel { max-height: min(85vh, 85dvh); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+.assistant-notice { padding: 6px 10px; font-size: .85rem; }
+/* Tablets: a roomier card in the corner. Large phones in landscape: the card may use nearly the whole height. */
+@media (min-width: 900px) { .assistant-panel { width: 460px; } }
+@media (max-height: 520px) { .assistant-panel { max-height: 96dvh; } .assistant-notice { display: none; } }
+/* Very small phones: smaller gutters, and answers may use the full width. */
+@media (max-width: 380px) { .assistant-msg { max-width: 96%; } .assistant-open { padding: 10px 16px; } }

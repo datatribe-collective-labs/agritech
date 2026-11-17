@@ -188,14 +188,16 @@ class AssistantService:
         if before != rating:
             # Counter for the dashboard.
             self.metrics.inc(f"feedback_{rating}")
-        # A thumbs down goes to a person, once per answer.
-        if rating == "down" and before != "down":
+        # The reason already stored for this answer ('' when none).
+        known_reason = entry.get("feedback_reason", "")
+        # A thumbs down reaches a person once, plus once more only if a different reason is added later.
+        if rating == "down" and (before != "down" or (reason and reason != known_reason)):
             # Queue it, marked as raised by the farmer.
             self.review_queue.add(entry["q"], entry["a"], [], session.card, source="farmer", reason=reason)
-        # Remember a reason given later for an answer already marked down.
-        elif rating == "down" and reason:
-            # Add the reason to the queue as an update line.
-            self.review_queue.add(entry["q"], entry["a"], [], session.card, source="farmer", reason=reason)
+        # Remember the tapped reason so a repeat tap on the same one is not queued again.
+        if reason:
+            # Store it with the answer.
+            entry["feedback_reason"] = reason
         # Saved.
         return True
 
