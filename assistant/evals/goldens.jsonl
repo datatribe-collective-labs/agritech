@@ -1,4 +1,5 @@
-{"id": "crop-explain", "slice": "crop page", "city": "Lagos", "species": "Zea mays", "question": "Why does this crop score like this?", "expect": {"grounded": true, "mentions_card_score": true}}
+{"id": "crop-explain", "slice": "crop page", "city": "Lagos", "species": "Zea mays", "question": "Why does this crop score like this?", "expect": {"grounded": true, "mentions_card_score": true, "mentions_card_rank": true}}
+{"id": "crop-unrecorded", "slice": "crop page", "city": "Lagos", "species": "Phaseolus vulgaris", "question": "Is this a good crop here?", "expect": {"grounded": true, "mentions_card_rank": true, "mentions": "not recorded"}}
 {"id": "city-top", "slice": "city page", "city": "Lagos", "species": "", "question": "What are the best crops here?", "expect": {"grounded": true}}
 {"id": "companions", "slice": "tool use", "city": "Lagos", "species": "Zea mays", "question": "Which companion crops go with it?", "expect": {"grounded": true, "uses_tool": "get_companions"}}
 {"id": "calendar", "slice": "tool use", "city": "Lagos", "species": "", "question": "Which month should I plant?", "expect": {"grounded": true, "uses_tool": "get_planting_calendar"}}

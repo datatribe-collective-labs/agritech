@@ -3,6 +3,9 @@
 # Lets us describe types before they are defined.
 from __future__ import annotations
 
+# Pattern matching for the rank check.
+import re
+
 
 def check_case(expect: dict, answer, card: dict) -> dict:
     """Compare one answer with what the case expects. Returns {check name: passed}."""
@@ -24,6 +27,11 @@ def check_case(expect: dict, answer, card: dict) -> dict:
     if expect.get("mentions_card_score"):
         # True when the score text appears.
         results["mentions_card_score"] = str(card.get("suitability_score")) in answer.text
+    # The answer must state the crop's rank from the card.
+    if expect.get("mentions_card_rank"):
+        # True when the rank number appears as a word-bounded number (7, 7th).
+        results["mentions_card_rank"] = bool(
+            re.search(rf"\b{card.get('rank_in_city')}(st|nd|rd|th)?\b", answer.text))
     # The answer must contain a phrase (case-insensitive).
     if expect.get("mentions"):
         # True when the phrase appears.

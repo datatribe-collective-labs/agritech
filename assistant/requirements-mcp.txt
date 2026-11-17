@@ -1,0 +1,3 @@
+# Only needed for the optional MCP server (assistant/mcp_server.py). The farmer chat does not use it.
+# Pinned to the major version because the MCP SDK API is still changing.
+mcp>=2,<3

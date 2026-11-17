@@ -47,3 +47,20 @@ Evals: `python -m assistant.evals.run_evals`.
 - The cache matches questions by words, not meaning. Embeddings are a later upgrade.
 - Sessions live in memory, so a restart forgets chats (safe, but not durable).
 - Thresholds in `evals/run_evals.py` are starting values, not validated.
+
+## Optional: MCP server (for your own AI tools, not for farmers)
+
+`assistant/mcp_server.py` lets a tool such as Claude Desktop ask the Planting API questions. It is read-only,
+runs locally over stdio, and offers exactly the assistant's eight allow-listed tools with the same data cleaning.
+It is deliberately not part of the farmer chat: that path stays in-process, with one less hop and one less thing to secure.
+
+```
+pip install -r assistant/requirements-mcp.txt
+```
+
+Claude Desktop config (set `ASSISTANT_API_BASE_URL` to the API address):
+
+```json
+{"mcpServers": {"planting": {"command": "python", "args": ["-m", "assistant.mcp_server"],
+  "env": {"ASSISTANT_API_BASE_URL": "https://94-237-15-238.sslip.io"}}}}
+```

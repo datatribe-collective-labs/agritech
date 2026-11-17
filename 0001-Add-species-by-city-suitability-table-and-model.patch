@@ -1,0 +1,658 @@
+From b622123148fe8a55c1fd366358093138ceee36dd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 22:30:19 +0300
+Subject: [PATCH] Add species-by-city suitability table and model
+
+Replaces the 27-class top_species target (about 45 cities) with one row per crop and city
+(about 2,000 rows): label = crop recorded near the city, features = plain fit checks
+(warm months, frost-free months, pH gap) plus city conditions and crop traits.
+
+- dbt: mart_species_city_suitability with tests and column descriptions
+- ml: train_suitability with leave-one-city-out scoring, two simple baselines
+  (crop popularity, trait fit) and an honest verdict; scores saved are out-of-sample
+- tests for leakage, baselines, random-label skill and metrics
+- glossary entries
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ .../marts/mart_species_city_suitability.sql   | 151 ++++++++++++
+ dbt/models/marts/schema.yml                   |  50 ++++
+ docs/DATA_GLOSSARY.md                         |   3 +
+ ml/models/train_suitability.py                | 225 ++++++++++++++++++
+ ml/tests/test_suitability.py                  | 132 ++++++++++
+ ml/utils/db.py                                |  17 ++
+ 6 files changed, 578 insertions(+)
+ create mode 100644 dbt/models/marts/mart_species_city_suitability.sql
+ create mode 100644 ml/models/train_suitability.py
+ create mode 100644 ml/tests/test_suitability.py
+
+diff --git a/dbt/models/marts/mart_species_city_suitability.sql b/dbt/models/marts/mart_species_city_suitability.sql
+new file mode 100644
+index 0000000..3bb800f
+--- /dev/null
++++ b/dbt/models/marts/mart_species_city_suitability.sql
+@@ -0,0 +1,151 @@
++-- ML feature table C: one row per crop species x city.
++-- "Does this crop suit this city?"
++--
++-- GRAIN: one row per (city, species) for every city with usable soil and frost data
++-- and every species in dim_plant_traits.
++--
++-- LABEL  observed_nearby = 1 when the species was recorded by GBIF within
++--        `species_radius_km` of the city (see int_city_species_presence), else 0.
++--        This is where people recorded the crop, not a measurement of how well it
++--        grows. A 0 can also mean "nobody recorded it", so treat the label as a
++--        proxy for suitability.
++--
++-- FIT CHECKS  compare what the crop needs (dim_plant_traits) with what the city offers.
++--        Each check is plain arithmetic, so a stakeholder can verify any row by hand:
++--          months_in_optimal_temp   months whose average temperature is inside the crop's optimal range
++--          frost_free_months        months with no frost days
++--          enough_frost_free_months 1 if the crop is frost hardy, or the city has at least as many
++--                                   frost-free months as the crop needs to mature
++--          ph_gap                   how far the soil pH is outside the crop's optimal pH range (0 = inside)
++--          trait_fit_share          share of the known checks passed (0 to 1)
++-- Nothing is guessed: a check that cannot be worked out stays empty.
++
++{{ config(materialized='table') }}
++
++WITH cities AS (
++    SELECT
++        city, country, latitude, longitude,
++        soil_ph, clay_pct, nitrogen_g_kg,
++        avg_annual_precip_mm, avg_frost_days_per_year, avg_annual_gdd, temp_variability_c,
++        frost_zone
++    FROM {{ ref('mart_ml_annual_features') }}
++    WHERE soil_ph IS NOT NULL
++      AND frost_zone IS NOT NULL
++      AND city IN (SELECT DISTINCT city FROM {{ ref('int_city_species_presence') }})
++),
++
++crops AS (
++    SELECT
++        species,
++        common_name,
++        functional_group,
++        frost_hardy,
++        nitrogen_fixation,
++        optimal_ph_min,
++        optimal_ph_max,
++        optimal_temp_min_c,
++        optimal_temp_max_c,
++        days_to_maturity_min,
++        -- Ordinal scale 1 (lowest) to 5 (highest); empty if the trait is blank or unknown
++        CASE drought_tolerance
++            WHEN 'very_low' THEN 1 WHEN 'low' THEN 2 WHEN 'medium' THEN 3
++            WHEN 'high' THEN 4     WHEN 'very_high' THEN 5
++        END AS drought_tolerance_level,
++        CASE water_demand
++            WHEN 'very_low' THEN 1 WHEN 'low' THEN 2 WHEN 'medium' THEN 3
++            WHEN 'high' THEN 4     WHEN 'very_high' THEN 5
++        END AS water_demand_level,
++        -- Whole months a crop needs to reach maturity (30-day months, rounded up)
++        CEIL(days_to_maturity_min / 30.0) AS months_to_mature
++    FROM {{ ref('dim_plant_traits') }}
++),
++
++monthly AS (
++    SELECT city, month, avg_temp_c, is_frost_free_month
++    FROM {{ ref('mart_planting_features') }}
++),
++
++monthly_fit AS (
++    SELECT
++        m.city,
++        c.species,
++        SUM(CASE WHEN m.avg_temp_c BETWEEN c.optimal_temp_min_c AND c.optimal_temp_max_c
++                 THEN 1 ELSE 0 END) AS months_in_optimal_temp,
++        SUM(CASE WHEN m.is_frost_free_month THEN 1 ELSE 0 END) AS frost_free_months,
++        COUNT(m.avg_temp_c)  AS months_with_temperature
++    FROM monthly m
++    CROSS JOIN crops c
++    GROUP BY m.city, c.species
++),
++
++observations AS (
++    SELECT city, species, SUM(observation_count) AS observation_count
++    FROM {{ ref('int_city_species_presence') }}
++    GROUP BY city, species
++),
++
++combined AS (
++    SELECT
++        ci.city, ci.country, ci.latitude, ci.longitude,
++        cr.species, cr.common_name, cr.functional_group,
++
++        -- LABEL
++        CASE WHEN COALESCE(o.observation_count, 0) > 0 THEN 1 ELSE 0 END AS observed_nearby,
++        COALESCE(o.observation_count, 0)                                  AS observation_count,
++
++        -- FIT CHECKS (crop needs vs city offers)
++        CASE WHEN f.months_with_temperature > 0 THEN f.months_in_optimal_temp END AS months_in_optimal_temp,
++        CASE WHEN f.months_with_temperature > 0 THEN f.frost_free_months      END AS frost_free_months,
++        cr.months_to_mature,
++        CASE
++            WHEN cr.frost_hardy THEN 1
++            WHEN f.months_with_temperature > 0 AND f.frost_free_months >= cr.months_to_mature THEN 1
++            WHEN f.months_with_temperature > 0 THEN 0
++        END AS enough_frost_free_months,
++        CASE
++            WHEN f.months_with_temperature = 0 THEN NULL
++            WHEN f.months_in_optimal_temp >= cr.months_to_mature THEN 1
++            ELSE 0
++        END AS enough_warm_months,
++        CASE
++            WHEN cr.optimal_ph_min IS NULL OR cr.optimal_ph_max IS NULL THEN NULL
++            WHEN ci.soil_ph < cr.optimal_ph_min THEN cr.optimal_ph_min - ci.soil_ph
++            WHEN ci.soil_ph > cr.optimal_ph_max THEN ci.soil_ph - cr.optimal_ph_max
++            ELSE 0
++        END AS ph_gap,
++
++        -- CITY CONDITIONS
++        ci.soil_ph, ci.clay_pct, ci.nitrogen_g_kg,
++        ci.avg_annual_precip_mm, ci.avg_frost_days_per_year, ci.avg_annual_gdd, ci.temp_variability_c,
++        ci.frost_zone,
++
++        -- CROP TRAITS
++        cr.optimal_ph_min, cr.optimal_ph_max, cr.optimal_temp_min_c, cr.optimal_temp_max_c,
++        cr.days_to_maturity_min,
++        cr.drought_tolerance_level,
++        cr.water_demand_level,
++        CASE WHEN cr.frost_hardy       THEN 1 ELSE 0 END AS frost_hardy_flag,
++        CASE WHEN cr.nitrogen_fixation THEN 1 ELSE 0 END AS nitrogen_fixer_flag
++    FROM cities ci
++    CROSS JOIN crops cr
++    LEFT JOIN monthly_fit f ON f.city = ci.city AND f.species = cr.species
++    LEFT JOIN observations o ON o.city = ci.city AND o.species = cr.species
++)
++
++SELECT
++    *,
++    -- Share of the checks we could work out that the crop passes: 0 (none) to 1 (all)
++    CASE
++        WHEN (CASE WHEN enough_warm_months       IS NULL THEN 0 ELSE 1 END
++            + CASE WHEN enough_frost_free_months IS NULL THEN 0 ELSE 1 END
++            + CASE WHEN ph_gap                   IS NULL THEN 0 ELSE 1 END) = 0
++            THEN NULL
++        ELSE ( COALESCE(enough_warm_months, 0)
++             + COALESCE(enough_frost_free_months, 0)
++             + CASE WHEN ph_gap = 0 THEN 1 ELSE 0 END )
++             / ( CASE WHEN enough_warm_months       IS NULL THEN 0 ELSE 1 END
++               + CASE WHEN enough_frost_free_months IS NULL THEN 0 ELSE 1 END
++               + CASE WHEN ph_gap                   IS NULL THEN 0 ELSE 1 END )::NUMERIC
++    END AS trait_fit_share,
++    CURRENT_TIMESTAMP AS feature_table_built_at
++FROM combined
+diff --git a/dbt/models/marts/schema.yml b/dbt/models/marts/schema.yml
+index b24129b..8f01cba 100644
+--- a/dbt/models/marts/schema.yml
++++ b/dbt/models/marts/schema.yml
+@@ -107,3 +107,53 @@ models:
+         description: Count 0-5 of populated monthly climate features.
+         tests:
+           - not_null
++
++  - name: mart_species_city_suitability
++    description: >
++      ML Feature Table C. One row per crop species and city: "does this crop suit this city?"
++      Covers every city with usable soil pH and frost data, and every species in dim_plant_traits.
++      The label observed_nearby says whether the crop was recorded near the city; it is a proxy
++      for suitability, not a measurement of how well the crop grows.
++      The fit-check columns compare what the crop needs with what the city offers, using plain
++      arithmetic. A check that cannot be worked out stays empty.
++    tests:
++      - dbt_utils.unique_combination_of_columns:
++          combination_of_columns:
++            - city
++            - species
++    columns:
++      - name: city
++        description: City name.
++        tests:
++          - not_null
++      - name: species
++        description: Scientific name of the crop, as in dim_plant_traits.
++        tests:
++          - not_null
++      - name: observed_nearby
++        description: 1 if the crop was recorded within the search radius of the city, otherwise 0. This is the ML label.
++        tests:
++          - not_null
++          - accepted_values:
++              values: [0, 1]
++              quote: false
++      - name: observation_count
++        description: Number of recorded observations of the crop near the city. Shown for information; never used as an ML feature.
++      - name: months_in_optimal_temp
++        description: Months (0 to 12) whose average temperature lies inside the crop's optimal temperature range.
++      - name: frost_free_months
++        description: Months (0 to 12) with no frost days at the city.
++      - name: months_to_mature
++        description: Whole months the crop needs to reach maturity (shortest days to maturity, in 30-day months).
++      - name: enough_warm_months
++        description: 1 if months_in_optimal_temp is at least months_to_mature, otherwise 0.
++      - name: enough_frost_free_months
++        description: 1 if the crop is frost hardy, or the city has at least as many frost-free months as the crop needs to mature; otherwise 0.
++      - name: ph_gap
++        description: How far the soil pH is outside the crop's optimal pH range, in pH units. 0 means inside the range.
++      - name: trait_fit_share
++        description: Share of the checks that could be worked out (warm months, frost-free months, pH) that the crop passes, from 0 to 1.
++        tests:
++          - dbt_utils.expression_is_true:
++              expression: ">= 0 AND trait_fit_share <= 1"
++              where: "trait_fit_share IS NOT NULL"
+diff --git a/docs/DATA_GLOSSARY.md b/docs/DATA_GLOSSARY.md
+index 8f3ea59..56fa449 100644
+--- a/docs/DATA_GLOSSARY.md
++++ b/docs/DATA_GLOSSARY.md
+@@ -16,6 +16,9 @@ Plain-language meaning of the main columns in the warehouse and the ML tables.
+ | Current conditions score | 100 minus penalties for today's frost (30), heat (20), severe/moderate water stress (20/10), low soil nitrogen (10) and flood risk (10). A snapshot of today. |
+ | Relationship score | Companion pair points (+3 beneficial, +1 neutral, -5 antagonistic) times evidence (x3 scientific, x2 traditional, x1 anecdotal). |
+ | Soil fertility points | 0-4: nitrogen at least 1.0 g/kg, organic carbon at least 10 g/kg, pH 6-7, loam/clay loam/silty texture. |
++| Observed nearby | 1 if a crop was recorded within the search radius of a city, otherwise 0. The label of the species-by-city model (`mart_species_city_suitability`). A 0 can also mean nobody recorded the crop. |
++| Trait fit share | Share of three plain checks a crop passes in a city: enough months in its optimal temperature range to mature, enough frost-free months (or frost hardy), and soil pH inside its optimal range. A check that cannot be worked out is left out, never assumed. |
++| Suitability score | Probability from the species-by-city model that a crop is recorded near a city. Always scored by a model that was trained without that city. |
+ 
+ ## Rules of thumb that still need expert validation
+ Soil texture classes, nitrogen cut-off (1.0 g/kg), water stress and irrigation urgency bands,
+diff --git a/ml/models/train_suitability.py b/ml/models/train_suitability.py
+new file mode 100644
+index 0000000..f72f7a7
+--- /dev/null
++++ b/ml/models/train_suitability.py
+@@ -0,0 +1,225 @@
++"""
++Trains the species-by-city suitability model.
++
++QUESTION
++  For a crop and a city: how likely is it that this crop is grown there?
++
++DATA
++  mart_species_city_suitability: one row per crop and city (about 2,000 rows).
++  Label: observed_nearby (1 = the crop was recorded near the city, 0 = not).
++  This is a proxy for suitability, not a measurement of yield.
++
++WHY THIS REPLACES THE top_species MODEL
++  The old model had to pick 1 of 27 crops from about 45 cities, so most crops had
++  one or two examples. Here every crop-city pair is an example, and the model
++  learns the general rule "this much frost and this pH suit crops like this".
++
++HOW WE TEST IT HONESTLY
++  Leave-one-city-out: to score a city, the model is trained on all OTHER cities.
++  No city is ever scored by a model that has seen it. Two simple baselines are
++  scored the same way, and the model only counts as useful if it beats them:
++    - species popularity: how often the crop is recorded across the other cities
++    - trait fit: the share of plain fit checks (warm months, frost, pH) the crop passes
++
++RUN
++  python -m ml.models.train_suitability
++"""
++
++import json
++import pickle
++import sys
++from datetime import datetime
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++from sklearn.metrics import average_precision_score, roc_auc_score
++from xgboost import XGBClassifier
++
++sys.path.insert(0, str(Path(__file__).parent.parent.parent))
++
++from ml.utils.db import load_suitability_features, save_predictions  # noqa: E402
++
++MODEL_DIR = Path(__file__).parent.parent / "saved_models"
++REPORT_DIR = Path(__file__).parent.parent / "evaluation_reports"
++
++LABEL = "observed_nearby"
++
++# observation_count is NOT a feature: it is the label in disguise.
++FEATURES = [
++    # Fit checks: what the crop needs versus what the city offers
++    "months_in_optimal_temp",
++    "frost_free_months",
++    "months_to_mature",
++    "enough_warm_months",
++    "enough_frost_free_months",
++    "ph_gap",
++    "trait_fit_share",
++    # City conditions
++    "soil_ph",
++    "clay_pct",
++    "nitrogen_g_kg",
++    "avg_annual_precip_mm",
++    "avg_frost_days_per_year",
++    "avg_annual_gdd",
++    "temp_variability_c",
++    # Crop traits
++    "optimal_ph_min",
++    "optimal_ph_max",
++    "optimal_temp_min_c",
++    "optimal_temp_max_c",
++    "days_to_maturity_min",
++    "drought_tolerance_level",
++    "water_demand_level",
++    "frost_hardy_flag",
++    "nitrogen_fixer_flag",
++]
++
++# Small data, so shallow trees and strong regularisation.
++# Missing values (for example an unknown pH) are left empty; XGBoost handles them itself.
++XGBOOST_PARAMS = {
++    "n_estimators": 200,
++    "max_depth": 3,
++    "learning_rate": 0.05,
++    "min_child_weight": 5,
++    "subsample": 0.8,
++    "colsample_bytree": 0.8,
++    "reg_lambda": 5.0,
++    "tree_method": "hist",
++    "eval_metric": "logloss",
++    "random_state": 42,
++    "n_jobs": 1,
++    "verbosity": 0,
++}
++
++TOP_N = 5  # number of crops we would recommend per city
++
++
++def _features_as_numbers(df: pd.DataFrame) -> pd.DataFrame:
++    """Selects the feature columns as floats. Empty values stay empty."""
++    return df[FEATURES].apply(pd.to_numeric, errors="coerce").astype(float)
++
++
++def leave_one_city_out_scores(df: pd.DataFrame) -> pd.DataFrame:
++    """
++    Scores every row with a model that never saw that row's city.
++
++    Returns the input columns city, species and the label, plus:
++      model_score    probability from the model
++      popularity     baseline: share of OTHER cities where the crop was recorded
++      trait_fit      baseline: trait_fit_share (empty values replaced by the other cities' average)
++    """
++    df = df.reset_index(drop=True)
++    X = _features_as_numbers(df)
++    y = df[LABEL].astype(int)
++
++    out = df[["city", "species", LABEL]].copy()
++    out["model_score"] = np.nan
++    out["popularity"] = np.nan
++    out["trait_fit"] = np.nan
++
++    for held_out in sorted(df["city"].unique()):
++        test = (df["city"] == held_out).to_numpy()
++        train = ~test
++
++        model = XGBClassifier(**XGBOOST_PARAMS)
++        model.fit(X[train], y[train])
++        out.loc[test, "model_score"] = model.predict_proba(X[test])[:, 1]
++
++        species_rate = y[train].groupby(df.loc[train, "species"]).mean()
++        out.loc[test, "popularity"] = (
++            df.loc[test, "species"].map(species_rate).fillna(y[train].mean()).to_numpy()
++        )
++
++        fit = X["trait_fit_share"]
++        out.loc[test, "trait_fit"] = fit[test].fillna(fit[train].mean()).to_numpy()
++
++    return out
++
++
++def top_n_hit_rate(scored: pd.DataFrame, score_column: str, n: int = TOP_N) -> float:
++    """
++    For each city, take the n best-scored crops and see how many were really recorded
++    near it. Returns the average share across cities (1.0 = every recommendation recorded).
++    """
++    rates = []
++    for _, city_rows in scored.groupby("city"):
++        top = city_rows.sort_values(score_column, ascending=False, kind="mergesort").head(n)
++        rates.append(top[LABEL].mean())
++    return float(np.mean(rates))
++
++
++def evaluate(scored: pd.DataFrame) -> dict:
++    """Pooled out-of-sample scores for the model and both baselines."""
++    results = {
++        "rows": int(len(scored)),
++        "cities": int(scored["city"].nunique()),
++        "share_recorded": round(float(scored[LABEL].mean()), 3),
++        "top_n": TOP_N,
++        "random_top_n_hit_rate": round(float(scored[LABEL].mean()), 3),
++    }
++    for name, column in [("model", "model_score"),
++                         ("popularity_baseline", "popularity"),
++                         ("trait_fit_baseline", "trait_fit")]:
++        results[name] = {
++            "roc_auc": round(float(roc_auc_score(scored[LABEL], scored[column])), 3),
++            "average_precision": round(float(average_precision_score(scored[LABEL], scored[column])), 3),
++            "top_n_hit_rate": round(top_n_hit_rate(scored, column), 3),
++        }
++    best_baseline_auc = max(results["popularity_baseline"]["roc_auc"],
++                            results["trait_fit_baseline"]["roc_auc"])
++    results["model_beats_best_baseline_by_auc"] = round(results["model"]["roc_auc"] - best_baseline_auc, 3)
++    return results
++
++
++def verdict(results: dict) -> str:
++    """One plain sentence on whether the model earns its place."""
++    gain = results["model_beats_best_baseline_by_auc"]
++    if gain >= 0.03:
++        return (f"The model beats the best simple baseline by {gain:.3f} AUC "
++                f"on cities it has never seen.")
++    if gain > 0:
++        return (f"The model is only {gain:.3f} AUC better than the best simple baseline: "
++                f"too small to justify the extra complexity yet.")
++    return ("The model does not beat the best simple baseline on cities it has never seen. "
++            "Use the baseline until there is more data.")
++
++
++def main():
++    df = load_suitability_features()
++    print(f"[suitability] {len(df)} rows, {df['city'].nunique()} cities, "
++          f"{df['species'].nunique()} species, "
++          f"{df[LABEL].mean():.1%} of pairs recorded")
++
++    scored = leave_one_city_out_scores(df)
++    results = evaluate(scored)
++    results["verdict"] = verdict(results)
++    results["trained_at"] = datetime.now().isoformat(timespec="seconds")
++
++    print(json.dumps(results, indent=2))
++
++    # Final model on all cities, for scoring cities that are not in the data yet.
++    final_model = XGBClassifier(**XGBOOST_PARAMS)
++    final_model.fit(_features_as_numbers(df), df[LABEL].astype(int))
++
++    MODEL_DIR.mkdir(parents=True, exist_ok=True)
++    REPORT_DIR.mkdir(parents=True, exist_ok=True)
++    with open(MODEL_DIR / "suitability_model.pkl", "wb") as f:
++        pickle.dump({"model": final_model, "features": FEATURES}, f)
++    with open(REPORT_DIR / "suitability_latest.json", "w") as f:
++        json.dump(results, f, indent=2)
++
++    # Scores saved for the AI layer are the leave-one-city-out ones, so a city's score
++    # never comes from a model that was trained on that city.
++    predictions = scored[["city", "species", LABEL, "model_score"]].rename(
++        columns={"model_score": "suitability_score"})
++    predictions["suitability_score"] = predictions["suitability_score"].round(4)
++    predictions["rank_in_city"] = (
++        predictions.groupby("city")["suitability_score"].rank(ascending=False, method="first").astype(int)
++    )
++    save_predictions(predictions, "ml_species_city_suitability")
++    print(f"[suitability] saved {len(predictions)} scores to ml_species_city_suitability")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/ml/tests/test_suitability.py b/ml/tests/test_suitability.py
+new file mode 100644
+index 0000000..df37b16
+--- /dev/null
++++ b/ml/tests/test_suitability.py
+@@ -0,0 +1,132 @@
++"""
++Tests for the species-by-city suitability model.
++
++What matters most:
++  - A city is never scored by a model trained on that city (no leakage).
++  - The baselines are also computed without the city being scored.
++  - Random labels give no skill, so a good score on real data means something.
++  - The label's twin, observation_count, is never a feature.
++"""
++
++import os
++import sys
++
++import numpy as np
++import pandas as pd
++import pytest
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
++
++from ml.models import train_suitability as ts  # noqa: E402
++
++
++def make_frame(n_cities=20, n_species=10, signal=True, seed=0):
++    """
++    Synthetic crop-city table. Warm-loving crops are recorded in warm cities and
++    cool-loving crops in cool cities when signal=True; labels are random otherwise.
++    """
++    rng = np.random.default_rng(seed)
++    rows = []
++    for c in range(n_cities):
++        warm_city = c % 2 == 0
++        for s in range(n_species):
++            warm_crop = s % 2 == 0
++            if signal:
++                label = int(warm_city == warm_crop)
++            else:
++                label = int(rng.random() < 0.5)
++            row = {col: float(rng.normal()) for col in ts.FEATURES}
++            row["months_in_optimal_temp"] = 10.0 if warm_city == warm_crop else 1.0
++            row["trait_fit_share"] = 1.0 if warm_city == warm_crop else 0.0
++            row.update({"city": f"city{c}", "species": f"crop{s}", ts.LABEL: label,
++                        "observation_count": label * 7})
++            rows.append(row)
++    return pd.DataFrame(rows)
++
++
++def test_observation_count_and_label_are_not_features():
++    assert "observation_count" not in ts.FEATURES
++    assert ts.LABEL not in ts.FEATURES
++
++
++def test_every_feature_exists_in_the_dbt_model():
++    sql = open(os.path.join(os.path.dirname(__file__), "..", "..", "dbt", "models", "marts",
++                            "mart_species_city_suitability.sql")).read()
++    missing = [f for f in ts.FEATURES if f not in sql]
++    assert missing == []
++
++
++def test_each_city_is_scored_by_a_model_that_did_not_train_on_it(monkeypatch):
++    df = make_frame(n_cities=6, n_species=4)
++    fits = []
++
++    class SpyModel:
++        def __init__(self, **kwargs):
++            pass
++
++        def fit(self, X, y):
++            fits.append(len(X))
++            return self
++
++        def predict_proba(self, X):
++            return np.full((len(X), 2), 0.5)
++
++    monkeypatch.setattr(ts, "XGBClassifier", SpyModel)
++    ts.leave_one_city_out_scores(df)
++
++    assert len(fits) == 6                      # one model per city
++    assert fits == [len(df) - 4] * 6           # each trained without that city's 4 rows
++
++
++def test_popularity_baseline_ignores_the_city_being_scored():
++    # crop A is recorded only in city1. Scoring city1 must not see that record.
++    df = make_frame(n_cities=3, n_species=2)
++    df[ts.LABEL] = 0
++    df.loc[(df["city"] == "city1") & (df["species"] == "crop0"), ts.LABEL] = 1
++
++    scored = ts.leave_one_city_out_scores(df)
++    own = scored[(scored["city"] == "city1") & (scored["species"] == "crop0")]
++    other = scored[(scored["city"] == "city0") & (scored["species"] == "crop0")]
++
++    assert own["popularity"].iloc[0] == 0.0     # the other two cities never recorded it
++    assert other["popularity"].iloc[0] == 0.5   # city1 recorded it, city2 did not
++
++
++def test_model_finds_a_real_pattern_in_cities_it_has_not_seen():
++    scored = ts.leave_one_city_out_scores(make_frame(signal=True))
++    results = ts.evaluate(scored)
++    assert results["model"]["roc_auc"] > 0.9
++    assert results["model"]["top_n_hit_rate"] > results["random_top_n_hit_rate"]
++
++
++def test_random_labels_give_no_skill():
++    scored = ts.leave_one_city_out_scores(make_frame(signal=False, seed=3))
++    auc = ts.evaluate(scored)["model"]["roc_auc"]
++    assert 0.35 < auc < 0.65
++
++
++def test_missing_values_are_accepted():
++    df = make_frame(n_cities=6, n_species=4)
++    df.loc[df["city"] == "city0", ["soil_ph", "ph_gap"]] = np.nan
++    scored = ts.leave_one_city_out_scores(df)
++    assert scored["model_score"].notna().all()
++
++
++def test_top_n_hit_rate_by_hand():
++    scored = pd.DataFrame({
++        "city": ["a"] * 4 + ["b"] * 4,
++        "species": list("wxyz") * 2,
++        ts.LABEL: [1, 1, 0, 0, 0, 1, 0, 0],
++        "score": [0.9, 0.8, 0.2, 0.1, 0.9, 0.8, 0.7, 0.1],
++    })
++    # top 2 in a = w, x -> both recorded (1.0); top 2 in b = w, x -> one recorded (0.5)
++    assert ts.top_n_hit_rate(scored, "score", n=2) == pytest.approx(0.75)
++
++
++@pytest.mark.parametrize("gain, phrase", [
++    (0.10, "beats the best simple baseline by"),
++    (0.01, "too small"),
++    (-0.02, "does not beat"),
++])
++def test_verdict_is_honest(gain, phrase):
++    assert phrase in ts.verdict({"model_beats_best_baseline_by_auc": gain})
+diff --git a/ml/utils/db.py b/ml/utils/db.py
+index b0bf83b..cbba432 100644
+--- a/ml/utils/db.py
++++ b/ml/utils/db.py
+@@ -64,6 +64,23 @@ def load_seasonal_features() -> pd.DataFrame:
+     return df
+ 
+ 
++def load_suitability_features() -> pd.DataFrame:
++    """
++    Loads mart_species_city_suitability: one row per crop species and city.
++    """
++    engine = get_engine()
++    query = text(f"""
++        SELECT *
++        FROM {marts_schema()}.mart_species_city_suitability
++        ORDER BY city, species
++    """)
++    with engine.connect() as conn:
++        df = pd.read_sql(query, conn)
++
++    print(f"[db] Loaded {len(df)} species-city rows")
++    return df
++
++
+ def save_predictions(predictions_df: pd.DataFrame, table_name: str):
+     """
+     Saves model predictions back to Postgres for the AI layer to read.
+-- 
+2.43.0
+

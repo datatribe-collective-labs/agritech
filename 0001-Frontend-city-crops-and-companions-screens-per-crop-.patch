@@ -1,0 +1,2731 @@
+From 4b38952ad8cf0d17291d4406197f0d0a7a9d5363 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 18:25:23 +0300
+Subject: [PATCH] Frontend: city, crops and companions screens; per-crop
+ companions endpoint
+
+Static site in frontend/ (no build step), self-hosted fonts, hash routing with a
+you-are-here trail on every page. API gains /cities/{city}/plants/{species}/companions,
+and mart_city_companions now carries relationship, notes and sources.
+Deploy: Caddy block for an app host, publish script, CORS origin.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ api/routers/cities.py                         |  27 +-
+ api/schemas.py                                |  19 +
+ dbt/models/marts/mart_city_companions.sql     |  11 +-
+ dbt/models/marts/schema.yml                   |   6 +
+ deploy/Caddyfile.example                      |  19 +
+ deploy/planting-api.service                   |   2 +-
+ deploy/publish-frontend.sh                    |  12 +
+ frontend/README.md                            |  29 ++
+ frontend/config.js                            |   2 +
+ frontend/css/styles.css                       | 268 +++++++++++++
+ .../fonts/LICENSE-bricolage-grotesque.txt     |  93 +++++
+ frontend/fonts/LICENSE-figtree.txt            |  93 +++++
+ ...ricolage-grotesque-latin-wght-normal.woff2 | Bin 0 -> 41344 bytes
+ .../fonts/figtree-latin-wght-normal.woff2     | Bin 0 -> 20156 bytes
+ frontend/index.html                           |  35 ++
+ frontend/js/api.js                            |  32 ++
+ frontend/js/format.js                         | 122 ++++++
+ frontend/js/main.js                           |  61 +++
+ frontend/js/views.js                          | 368 ++++++++++++++++++
+ frontend/tests/format.test.mjs                |  70 ++++
+ tests/api/test_api.py                         |  23 +-
+ 21 files changed, 1282 insertions(+), 10 deletions(-)
+ create mode 100644 deploy/Caddyfile.example
+ create mode 100755 deploy/publish-frontend.sh
+ create mode 100644 frontend/README.md
+ create mode 100644 frontend/config.js
+ create mode 100644 frontend/css/styles.css
+ create mode 100644 frontend/fonts/LICENSE-bricolage-grotesque.txt
+ create mode 100644 frontend/fonts/LICENSE-figtree.txt
+ create mode 100644 frontend/fonts/bricolage-grotesque-latin-wght-normal.woff2
+ create mode 100644 frontend/fonts/figtree-latin-wght-normal.woff2
+ create mode 100644 frontend/index.html
+ create mode 100644 frontend/js/api.js
+ create mode 100644 frontend/js/format.js
+ create mode 100644 frontend/js/main.js
+ create mode 100644 frontend/js/views.js
+ create mode 100644 frontend/tests/format.test.mjs
+
+diff --git a/api/routers/cities.py b/api/routers/cities.py
+index 42dfab6..060dfe3 100644
+--- a/api/routers/cities.py
++++ b/api/routers/cities.py
+@@ -7,9 +7,9 @@ from sqlalchemy.engine import Connection
+ 
+ from api.caveats import CAVEATS, NO_RECOMMENDATIONS, NO_SOIL_DATA
+ from api.db import first, get_connection, rows
+-from api.routers.deps import Tables, known_city, tables
++from api.routers.deps import Tables, known_city, known_species, tables
+ from api.schemas import (CityContext, CityDetail, CityPlantDetail, CityPlants, CitySummary,
+-                         Companion, MonthlyClimate)
++                         Companion, MonthlyClimate, PlantCompanion)
+ 
+ router = APIRouter(prefix="/cities", tags=["cities"])
+ 
+@@ -126,6 +126,25 @@ def city_plant_detail(species: str, city: str = Depends(known_city),
+     return {**plant, "fit": row, "traits": traits}
+ 
+ 
++@router.get("/{city}/plants/{species}/companions", response_model=List[PlantCompanion],
++            summary="Crops that grow well with this crop near this city, with the reason why")
++def plant_companions(species: str = Depends(known_species), city: str = Depends(known_city),
++                     conn: Connection = Depends(get_connection), t: Tables = Depends(tables)):
++    return rows(conn, f"""
++        SELECT CASE WHEN c.species_a = :s THEN c.species_b ELSE c.species_a END AS partner,
++               p.common_name AS partner_common_name, p.functional_group AS partner_functional_group,
++               r.rank_in_city AS partner_rank_in_city,
++               c.relationship, c.mechanism, c.benefit_category, c.evidence_level, c.relationship_score,
++               c.notes, c.evidence_source, c.source_url
++        FROM {t.companions} c
++        LEFT JOIN {t.profiles} p
++               ON p.species = CASE WHEN c.species_a = :s THEN c.species_b ELSE c.species_a END
++        LEFT JOIN {t.scores} r
++               ON r.city = c.city AND r.species = p.species
++        WHERE c.city = :city AND (c.species_a = :s OR c.species_b = :s)
++        ORDER BY c.relationship_score DESC, c.pair_rank""", city=city, s=species)
++
++
+ @router.get("/{city}/climate/monthly", response_model=List[MonthlyClimate],
+             summary="Average climate for each calendar month (10-year NASA average)")
+ def city_monthly_climate(city: str = Depends(known_city), conn: Connection = Depends(get_connection),
+@@ -142,7 +161,7 @@ def city_companions(city: str = Depends(known_city), limit: int = Query(10, ge=1
+                     conn: Connection = Depends(get_connection), t: Tables = Depends(tables)):
+     return rows(conn, f"""
+         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
+-               relationship_score, notes
++               relationship_score, relationship, notes, evidence_source, source_url
+         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT :limit""", city=city, limit=limit)
+ 
+ 
+@@ -154,7 +173,7 @@ def city_context(city: str = Depends(known_city), conn: Connection = Depends(get
+     top = _city_plants(conn, t, city, limit=5)
+     companions = rows(conn, f"""
+         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
+-               relationship_score, notes
++               relationship_score, relationship, notes, evidence_source, source_url
+         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT 5""", city=city)
+     caveats = list(CAVEATS) if top else [_why_no_scores(conn, t, city)]
+     return {"city": detail, "recommendations_available": bool(top), "top_plants": top,
+diff --git a/api/schemas.py b/api/schemas.py
+index 6442213..2a63a55 100644
+--- a/api/schemas.py
++++ b/api/schemas.py
+@@ -132,7 +132,26 @@ class Companion(BaseModel):
+     benefit_category: Optional[str] = None
+     evidence_level: Optional[str] = None
+     relationship_score: Optional[int] = None
++    relationship: Optional[str] = None
+     notes: Optional[str] = None
++    evidence_source: Optional[str] = None
++    source_url: Optional[str] = None
++
++
++class PlantCompanion(BaseModel):
++    """The partner of one crop in one city, with the reason the pair works."""
++    partner: str
++    partner_common_name: Optional[str] = None
++    partner_functional_group: Optional[str] = None
++    partner_rank_in_city: Optional[int] = None   # empty when the partner has no score in this city
++    relationship: Optional[str] = None
++    mechanism: Optional[str] = None
++    benefit_category: Optional[str] = None
++    evidence_level: Optional[str] = None
++    relationship_score: Optional[int] = None
++    notes: Optional[str] = None
++    evidence_source: Optional[str] = None
++    source_url: Optional[str] = None
+ 
+ 
+ class CityContext(BaseModel):
+diff --git a/dbt/models/marts/mart_city_companions.sql b/dbt/models/marts/mart_city_companions.sql
+index 38a9935..25fd952 100644
+--- a/dbt/models/marts/mart_city_companions.sql
++++ b/dbt/models/marts/mart_city_companions.sql
+@@ -3,6 +3,8 @@
+ -- GRAIN: one row per city and companion pair.
+ -- A pair is listed for a city only when BOTH crops were recorded near it and the pair
+ -- is not antagonistic (see int_city_companions). pair_rank 1 is the best pair for the city.
++-- notes, evidence_source and source_url come from the curated companion_planting seed;
++-- evidence_source says plainly when a pair has not been checked against a paper.
+ 
+ {{ config(materialized='table') }}
+ 
+@@ -15,7 +17,10 @@ SELECT
+     c.benefit_category,
+     c.evidence_level,
+     c.relationship_score,
+-    m.notes
++    s.relationship,
++    s.notes,
++    s.evidence_source,
++    s.source_url
+ FROM {{ ref('int_city_companions') }} c
+-LEFT JOIN {{ ref('int_companion_matrix') }} m
+-    ON m.species_a = c.species_a AND m.species_b = c.species_b
++LEFT JOIN {{ ref('companion_planting') }} s
++    ON s.species_a = c.species_a AND s.species_b = c.species_b
+diff --git a/dbt/models/marts/schema.yml b/dbt/models/marts/schema.yml
+index d27be10..33f940d 100644
+--- a/dbt/models/marts/schema.yml
++++ b/dbt/models/marts/schema.yml
+@@ -192,3 +192,9 @@ models:
+           - not_null
+       - name: pair_rank
+         description: 1 is the best pair for the city (strongest relationship, then the more recorded crops).
++      - name: relationship
++        description: beneficial or neutral (antagonistic pairs are not listed).
++      - name: notes
++        description: One-sentence plain explanation of why the pair works.
++      - name: evidence_source
++        description: Where the pair comes from, including a plain note when it has not been checked against a paper.
+diff --git a/deploy/Caddyfile.example b/deploy/Caddyfile.example
+new file mode 100644
+index 0000000..04fdcd6
+--- /dev/null
++++ b/deploy/Caddyfile.example
+@@ -0,0 +1,19 @@
++# /etc/caddy/Caddyfile  (replace the IP with the server's; dots become dashes)
++
++# The API
++94-237-15-238.sslip.io {
++    reverse_proxy 127.0.0.1:8000
++}
++
++# The website farmers open
++app.94-237-15-238.sslip.io {
++    root * /var/www/planting-intelligence
++    encode zstd gzip
++    file_server
++    header {
++        X-Content-Type-Options nosniff
++        Referrer-Policy strict-origin-when-cross-origin
++    }
++    @assets path /fonts/* /css/* /js/*
++    header @assets Cache-Control "public, max-age=3600"
++}
+diff --git a/deploy/planting-api.service b/deploy/planting-api.service
+index 451e7ac..f0a4854 100644
+--- a/deploy/planting-api.service
++++ b/deploy/planting-api.service
+@@ -6,7 +6,7 @@ After=network-online.target
+ [Service]
+ EnvironmentFile=/root/airflow_home/airflow.env
+ Environment=PLANTING_MARTS_SCHEMA=planting_intelligence_marts
+-Environment=API_CORS_ORIGINS=http://localhost:3000
++Environment=API_CORS_ORIGINS=https://app.94-237-15-238.sslip.io,http://localhost:3000
+ WorkingDirectory=/root/agritech
+ ExecStart=/root/agritech/venvs/api/bin/uvicorn api.main:create_app --factory --host 127.0.0.1 --port 8000
+ Restart=on-failure
+diff --git a/deploy/publish-frontend.sh b/deploy/publish-frontend.sh
+new file mode 100755
+index 0000000..8203b91
+--- /dev/null
++++ b/deploy/publish-frontend.sh
+@@ -0,0 +1,12 @@
++#!/usr/bin/env bash
++# Copies the frontend to the folder Caddy serves. Run on the server after `git pull`.
++# (Caddy runs as its own user and cannot read /root, so the site is served from /var/www.)
++set -euo pipefail
++SRC="$(cd "$(dirname "$0")/../frontend" && pwd)"
++DEST=/var/www/planting-intelligence
++rm -rf "$DEST"
++mkdir -p "$DEST"
++cp -r "$SRC"/. "$DEST"/
++rm -rf "$DEST/tests" "$DEST/README.md"
++chmod -R a+rX "$DEST"
++echo "Published $SRC to $DEST"
+diff --git a/frontend/README.md b/frontend/README.md
+new file mode 100644
+index 0000000..edf5d68
+--- /dev/null
++++ b/frontend/README.md
+@@ -0,0 +1,29 @@
++# Planting Intelligence website
++
++A static site (no build step) that talks to the API. Screens: choose a city, crops for the city, companion crops for a crop (with the reason and the source), and an About page.
++
++    frontend/
++      index.html        page shell, top bar with the "you are here" trail
++      config.js         the API address (the only setting)
++      css/styles.css    layout, colours, animation (works from phone to wide laptop)
++      js/format.js      safe templating and plain-language wording (unit tested)
++      js/api.js         API calls
++      js/views.js       the screens
++      js/main.js        routing (links look like #/city/Lagos/plant/Zea%20mays)
++      fonts/            Bricolage Grotesque and Figtree, SIL Open Font Licence
++
++Every page has a link in the URL, so a farmer can share or bookmark any screen, and the browser's Back button works.
++
++## Try it locally
++
++    python -m http.server 8002 --directory frontend
++    # open http://127.0.0.1:8002 (the API must allow this origin: API_CORS_ORIGINS=http://127.0.0.1:8002)
++
++## Tests
++
++    node --test frontend/tests/format.test.mjs
++
++## Publish (on the server)
++
++    git pull
++    ./deploy/publish-frontend.sh
+diff --git a/frontend/config.js b/frontend/config.js
+new file mode 100644
+index 0000000..f713407
+--- /dev/null
++++ b/frontend/config.js
+@@ -0,0 +1,2 @@
++// Where the API lives. Change this one line if the API moves to a new address.
++window.PLANTING_CONFIG = { apiBase: "https://94-237-15-238.sslip.io" };
+diff --git a/frontend/css/styles.css b/frontend/css/styles.css
+new file mode 100644
+index 0000000..99b6216
+--- /dev/null
++++ b/frontend/css/styles.css
+@@ -0,0 +1,268 @@
++/* Planting Intelligence. Mobile first. Colours are named for what they measure. */
++
++@font-face { font-family: "Bricolage Grotesque"; src: url("../fonts/bricolage-grotesque-latin-wght-normal.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
++@font-face { font-family: "Figtree"; src: url("../fonts/figtree-latin-wght-normal.woff2") format("woff2"); font-weight: 300 900; font-display: swap; }
++
++:root {
++  --chalk: #f2f5ea;
++  --paper: #fbfcf7;
++  --ink: #14301e;
++  --ink-soft: #3c5545;
++  --line: #d3dcc6;
++  --leaf: #2c7a4b;
++  --leaf-deep: #1e5c37;
++  --leaf-tint: #dcebd8;
++  --marigold: #e9a81b;
++  --soil: #6b4a2f;
++  --soil-tint: #efe4d6;
++  --rain: #2e6f95;
++  --rain-tint: #dbe9f1;
++  --frost: #5f559f;
++  --frost-tint: #e6e3f3;
++  --heat: #b85a17;
++  --heat-tint: #f6e4d2;
++  --warn: #9a3d1e;
++  --radius: 16px;
++  --radius-sm: 10px;
++  --ease: cubic-bezier(.2, .7, .2, 1);
++  --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
++  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
++  --gutter: clamp(16px, 4vw, 40px);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root {
++    --chalk: #0f1c14; --paper: #162a1d; --ink: #e6efe0; --ink-soft: #aebfb2; --line: #2b4234;
++    --leaf: #5fbf85; --leaf-deep: #8ad8a8; --leaf-tint: #1f3a2a; --marigold: #f0bd4a;
++    --soil: #d2a97c; --soil-tint: #2f2418; --rain: #7bb8dc; --rain-tint: #162d3b;
++    --frost: #b3a9ee; --frost-tint: #25213f; --heat: #f0a063; --heat-tint: #3a2414; --warn: #f0906c;
++  }
++}
++
++*, *::before, *::after { box-sizing: border-box; }
++html { -webkit-text-size-adjust: 100%; scroll-padding-top: 120px; }
++body {
++  margin: 0; overflow-x: clip; background: var(--chalk); color: var(--ink);
++  font: 400 1.0625rem/1.55 var(--body); min-height: 100vh; display: flex; flex-direction: column;
++}
++main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px var(--gutter) 56px; outline: none; }
++h1, h2, h3 { font-family: var(--display); line-height: 1.12; margin: 0; letter-spacing: -.015em; color: var(--ink); }
++h1 { font-size: clamp(2rem, 6.2vw, 3.4rem); font-weight: 700; }
++h1:focus, h1:focus-visible { outline: none; }
++h2 { font-size: clamp(1.35rem, 3.4vw, 1.75rem); font-weight: 650; }
++h3 { font-size: 1.1rem; font-weight: 650; letter-spacing: -.005em; }
++p { margin: 0 0 .8em; max-width: 68ch; }
++a { color: var(--leaf-deep); text-underline-offset: 3px; }
++a:hover { color: var(--leaf); }
++:focus-visible { outline: 3px solid var(--marigold); outline-offset: 3px; border-radius: 6px; }
++.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
++.skip { position: absolute; left: 12px; top: -60px; background: var(--leaf-deep); color: #fff; padding: 10px 14px; border-radius: 8px; z-index: 30; }
++.skip:focus { top: 10px; }
++.muted { color: var(--ink-soft); }
++.small { font-size: .9rem; }
++.latin { font-style: italic; color: var(--ink-soft); }
++[hidden] { display: none !important; }
++
++/* Top bar: brand, you-are-here trail, about link */
++.topbar {
++  position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: 1fr auto; align-items: center;
++  gap: 4px 16px; padding: 10px var(--gutter); background: color-mix(in srgb, var(--chalk) 88%, transparent);
++  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
++}
++.brand { grid-row: 1; grid-column: 1; display: inline-flex; align-items: center; gap: 10px; color: var(--leaf); text-decoration: none; font: 700 1.05rem var(--display); letter-spacing: -.01em; }
++.brand span { color: var(--ink); }
++.about-link { grid-row: 1; grid-column: 2; font-size: .95rem; font-weight: 600; text-decoration: none; padding: 8px 4px; }
++.about-link:hover { text-decoration: underline; }
++.crumbs { grid-row: 2; grid-column: 1 / -1; overflow-x: auto; scrollbar-width: none; }
++.crumbs::-webkit-scrollbar { display: none; }
++.crumbs ol { display: flex; gap: 0; list-style: none; margin: 0; padding: 0; white-space: nowrap; font-size: .95rem; }
++.crumbs li { display: inline-flex; align-items: center; }
++.crumbs li + li::before { content: "/"; color: var(--ink-soft); opacity: .6; margin: 0 .55em; }
++.crumbs a { display: inline-block; padding: 8px 2px; font-weight: 600; text-decoration: none; }
++.crumbs a:hover { text-decoration: underline; }
++.crumbs [aria-current] { display: inline-block; padding: 8px 2px; color: var(--ink-soft); font-weight: 500; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
++@media (min-width: 820px) {
++  .topbar { grid-template-columns: auto 1fr auto; gap: 24px; }
++  .crumbs { grid-row: 1; grid-column: 2; }
++  .about-link { grid-column: 3; }
++  .crumbs [aria-current] { max-width: 40ch; }
++}
++
++/* Page change: the browser cross-fades the page where it can */
++::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; }
++
++/* Hero, the one orchestrated moment: seedlings grow out of the soil layers */
++.hero {
++  --field: clamp(170px, 22vw, 250px);
++  position: relative; width: 100vw; margin: 8px 0 0 calc(50% - 50vw); overflow: hidden;
++  padding: clamp(28px, 7vw, 72px) max(var(--gutter), calc((100vw - 1120px) / 2 + var(--gutter))) 0;
++}
++.hero-text { position: relative; z-index: 1; max-width: 640px; padding-bottom: calc(var(--field) * .84); }
++.lede { font-size: clamp(1.1rem, 2.6vw, 1.3rem); color: var(--ink-soft); margin-top: 16px; }
++.field { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: var(--field); pointer-events: none; }
++.soil { stroke: none; } .soil-1 { fill: #7a5636; } .soil-2 { fill: #5e4129; } .soil-3 { fill: #432d1c; }
++.stem { fill: none; stroke: var(--leaf); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: grow 1.3s var(--ease) var(--d, 0s) forwards; }
++.leaf { fill: var(--leaf); opacity: .9; transform-box: fill-box; transform-origin: 0% 100%; transform: scale(0); animation: unfurl .6s var(--ease) calc(var(--d, 0s) + 1s) forwards; }
++.leaf-b { fill: #4fa66c; transform-origin: 100% 100%; }
++.stems g { animation: none; }
++.stems > g { --d: 0s; }
++@keyframes grow { to { stroke-dashoffset: 0; } }
++@keyframes unfurl { to { transform: scale(1); } }
++
++.search { display: block; margin-top: 26px; max-width: 480px; }
++.search input {
++  width: 100%; font: 500 1.1rem var(--body); color: var(--ink); background: var(--paper); border: 2px solid var(--line);
++  border-radius: 999px; padding: 16px 22px; transition: border-color .2s, box-shadow .2s;
++}
++.search input::placeholder { color: var(--ink-soft); opacity: .8; }
++.search input:focus { outline: none; border-color: var(--leaf); box-shadow: 0 0 0 4px color-mix(in srgb, var(--leaf) 22%, transparent); }
++.again { margin-top: 14px; color: var(--ink-soft); }
++
++/* City grid */
++.hero + section { padding-top: 4px; }
++.city-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 12px; margin-top: 28px; }
++.city-card {
++  display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; background: var(--paper); border: 1.5px solid var(--line);
++  border-radius: var(--radius); text-decoration: none; color: var(--ink); min-height: 96px;
++  transition: transform .2s var(--ease), border-color .2s, box-shadow .2s;
++}
++.city-card:hover { transform: translateY(-3px); border-color: var(--leaf); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--leaf-deep) 60%, transparent); }
++.city-name { font: 650 1.25rem var(--display); letter-spacing: -.01em; }
++.city-country { color: var(--ink-soft); }
++.city-meta { margin-top: auto; font-size: .88rem; color: var(--ink-soft); padding-top: 8px; }
++.city-card.is-quiet { background: transparent; border-style: dashed; }
++.empty, .empty-inline { color: var(--ink-soft); margin-top: 24px; }
++
++/* Page heads and panels */
++.back { display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; font-weight: 600; text-decoration: none; }
++.back::before { content: ""; width: 9px; height: 9px; border-left: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg); margin-right: 2px; transition: transform .2s var(--ease); }
++.back:hover::before { transform: translateX(-3px) rotate(45deg); }
++.page-head { padding: 4px 0 20px; }
++.sub { font-size: 1.15rem; color: var(--ink-soft); margin: 8px 0 0; }
++.panel { background: var(--paper); border: 1.5px solid var(--line); border-radius: calc(var(--radius) + 4px); padding: clamp(18px, 4vw, 32px); margin-top: 20px; }
++.panel > h2 + .muted, .panel > h2 + p { margin-top: 8px; }
++.notice { background: var(--paper); border: 1.5px solid var(--line); border-left: 6px solid var(--marigold); border-radius: var(--radius); padding: clamp(18px, 4vw, 32px); margin-top: 24px; }
++.notice p { margin-top: 10px; }
++.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
++.button {
++  display: inline-flex; align-items: center; justify-content: center; font: 650 1rem var(--body); cursor: pointer;
++  background: var(--leaf-deep); color: #fff; border: 2px solid var(--leaf-deep); border-radius: 999px; padding: 12px 22px; text-decoration: none; min-height: 46px;
++  transition: transform .15s var(--ease), background .2s;
++}
++.button:hover { background: var(--leaf); border-color: var(--leaf); color: #fff; transform: translateY(-1px); }
++.button.ghost { background: transparent; color: var(--leaf-deep); border-color: var(--leaf); }
++.button.ghost:hover { background: var(--leaf-tint); color: var(--leaf-deep); }
++.button.small { min-height: 40px; padding: 8px 16px; font-size: .95rem; }
++
++/* Soil, rain, frost, heat tiles */
++.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 0; }
++.stat { border-radius: var(--radius); padding: 14px 16px; border: 1.5px solid transparent; }
++.stat dt { font-size: .9rem; font-weight: 600; opacity: .9; }
++.stat dd { margin: 2px 0 0; }
++.stat dd:not(.note) { font: 700 1.5rem/1.15 var(--display); letter-spacing: -.01em; }
++.stat dd.unknown { font-size: 1.05rem; opacity: .7; font-weight: 600; }
++.stat .note { font-size: .88rem; opacity: .85; }
++.stat-soil { background: var(--soil-tint); color: var(--soil); }
++.stat-rain { background: var(--rain-tint); color: var(--rain); }
++.stat-frost { background: var(--frost-tint); color: var(--frost); }
++.stat-heat { background: var(--heat-tint); color: var(--heat); }
++@media (min-width: 720px) { .stats { grid-template-columns: repeat(5, 1fr); } .stat dd:not(.note) { font-size: 1.35rem; } }
++@media (min-width: 540px) and (max-width: 719px) { .stats { grid-template-columns: repeat(3, 1fr); } }
++
++/* Filter chips */
++.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 6px; }
++.chip { font: 600 .95rem var(--body); color: var(--ink); background: transparent; border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 16px; min-height: 40px; cursor: pointer; transition: background .2s, border-color .2s; }
++.chip:hover { border-color: var(--leaf); }
++.chip.is-on { background: var(--leaf-deep); color: #fff; border-color: var(--leaf-deep); }
++
++/* Crop list */
++.plant-list { display: grid; gap: 10px; margin-top: 14px; }
++.plant-card {
++  display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; padding: 14px 16px; background: var(--chalk);
++  border: 1.5px solid var(--line); border-radius: var(--radius); text-decoration: none; color: var(--ink);
++  transition: transform .2s var(--ease), border-color .2s, background .2s;
++}
++.plant-card:hover { transform: translateY(-2px); border-color: var(--leaf); background: var(--paper); }
++.rank { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--leaf-tint); color: var(--leaf-deep); font: 700 1.1rem var(--display); }
++.plant-card:first-child .rank { background: var(--marigold); color: #3a2a00; }
++.plant-main { display: flex; flex-direction: column; min-width: 0; }
++.plant-name { font: 650 1.2rem var(--display); letter-spacing: -.01em; }
++.plant-main .latin { font-size: .95rem; }
++.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
++.tag { font-size: .82rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--line); color: var(--ink); }
++.tag-yes { background: var(--leaf-tint); color: var(--leaf-deep); }
++.tag-no { background: transparent; border: 1.5px solid var(--line); color: var(--ink-soft); }
++.fit { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
++.fit-bar { flex: 1; height: 10px; background: var(--line); border-radius: 999px; overflow: hidden; }
++.fit-bar i { display: block; height: 100%; width: var(--w); background: linear-gradient(90deg, var(--leaf), var(--marigold)); border-radius: inherit; animation: fill .9s var(--ease) both; }
++@keyframes fill { from { width: 0; } }
++.fit-label { font-size: .85rem; color: var(--ink-soft); min-width: 7.5em; text-align: right; }
++@media (min-width: 760px) {
++  .plant-list { grid-template-columns: repeat(2, 1fr); }
++  .plant-card { grid-template-columns: auto 1fr; }
++}
++
++.more { text-align: center; margin: 16px 0 0; }
++
++/* Year strip */
++.year { list-style: none; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: clamp(2px, 1vw, 8px); padding: 0; margin: 18px 0 8px; }
++.year li { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 6px; border-radius: 12px; font-size: clamp(.68rem, 1.8vw, .85rem); }
++.year li.good { background: var(--leaf-tint); }
++.bar-wrap { display: flex; align-items: flex-end; height: 110px; width: 100%; justify-content: center; }
++.bar { width: clamp(8px, 55%, 26px); height: var(--h); background: var(--heat); border-radius: 8px 8px 3px 3px; opacity: .85; transform-origin: bottom; animation: rise .8s var(--ease) both; }
++.year li.good .bar { background: var(--leaf); opacity: 1; }
++@keyframes rise { from { transform: scaleY(0); } }
++.year .t { font-weight: 700; } .year .rain { color: var(--rain); font-weight: 600; } .year .m { color: var(--ink-soft); }
++.legend { font-size: .85rem; color: var(--ink-soft); margin: 4px 0 0; }
++.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 6px 0 0; } .legend .dot + .dot, .legend .dot.r { margin-left: 14px; }
++.legend .t { background: var(--heat); } .legend .r { background: var(--rain); }
++
++/* Companion pairs */
++.pairs { display: grid; gap: 14px; margin-top: 18px; }
++@media (min-width: 820px) { .pairs { grid-template-columns: repeat(2, 1fr); } }
++.pair { display: flex; flex-direction: column; gap: 10px; padding: clamp(16px, 3vw, 24px); background: var(--chalk); border: 1.5px solid var(--line); border-radius: var(--radius); }
++.pair-head { display: flex; flex-direction: column; gap: 10px; }
++.pair-names { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 650 1.2rem var(--display); }
++.pair-names b { font-weight: 650; }
++.plus { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--marigold); color: #3a2a00; font: 700 1rem var(--body); }
++.badges { display: flex; flex-wrap: wrap; gap: 6px; }
++.pair h3 { color: var(--leaf-deep); }
++.why { margin: 0; }
++.source { font-size: .88rem; color: var(--ink-soft); margin: 0; }
++.src-status { display: inline-block; font-weight: 700; font-size: .8rem; padding: 2px 10px; border-radius: 999px; margin-right: 6px; background: var(--line); color: var(--ink); }
++.src-status.is-checked { background: var(--leaf-tint); color: var(--leaf-deep); }
++.src-status.is-open { background: var(--heat-tint); color: var(--heat); }
++.pair .button { align-self: flex-start; margin-top: auto; }
++
++/* Fit checks, reasons, needs */
++.two { display: grid; gap: 28px; }
++@media (min-width: 820px) { .two { grid-template-columns: 1fr 1fr; gap: 48px; } }
++.checks, .reasons { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 12px; }
++.checks li { display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; }
++.mark { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 .85rem var(--body); margin-top: 1px; }
++.yes .mark { background: var(--leaf); } .yes .mark::after { content: "✓"; color: #fff; }
++.no .mark { background: var(--warn); } .no .mark::after { content: "!"; color: #fff; }
++.maybe .mark { background: var(--line); } .maybe .mark::after { content: "?"; color: var(--ink); }
++.reasons { counter-reset: r; }
++.reasons li { counter-increment: r; padding-left: 36px; position: relative; }
++.reasons li::before { content: counter(r); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--leaf-tint); color: var(--leaf-deep); font: 700 .85rem var(--body); display: grid; place-items: center; }
++.needs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px 24px; margin: 18px 0; }
++.needs dt { font-size: .88rem; color: var(--ink-soft); font-weight: 600; }
++.needs dd { margin: 2px 0 0; font: 650 1.1rem var(--display); }
++.needs dd.unknown { font: 500 1rem var(--body); color: var(--ink-soft); }
++.prose h2 { margin-top: 1.4em; } .prose h2:first-child { margin-top: 0; }
++.prose ul { padding-left: 1.2em; max-width: 68ch; } .prose li { margin-bottom: .45em; }
++
++/* Loading and footer */
++.skeleton { display: grid; gap: 14px; padding-top: 40px; }
++.skeleton i { display: block; height: 72px; border-radius: var(--radius); background: linear-gradient(90deg, var(--line) 25%, var(--paper) 50%, var(--line) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
++.skeleton i:first-child { height: 120px; width: min(100%, 560px); }
++main.loading { opacity: .6; transition: opacity .2s .15s; }
++@keyframes shimmer { to { background-position: -200% 0; } }
++.foot { border-top: 1px solid var(--line); padding: 24px var(--gutter) 36px; color: var(--ink-soft); font-size: .92rem; text-align: center; }
++.foot p { margin: 0 auto .4em; }
++
++@media (prefers-reduced-motion: reduce) {
++  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
++  .stem { stroke-dashoffset: 0; } .leaf { transform: scale(1); }
++}
+diff --git a/frontend/fonts/LICENSE-bricolage-grotesque.txt b/frontend/fonts/LICENSE-bricolage-grotesque.txt
+new file mode 100644
+index 0000000..49135ef
+--- /dev/null
++++ b/frontend/fonts/LICENSE-bricolage-grotesque.txt
+@@ -0,0 +1,93 @@
++Copyright 2022 The Bricolage Grotesque Project Authors (https://github.com/ateliertriay/bricolage)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/frontend/fonts/LICENSE-figtree.txt b/frontend/fonts/LICENSE-figtree.txt
+new file mode 100644
+index 0000000..9766a6f
+--- /dev/null
++++ b/frontend/fonts/LICENSE-figtree.txt
+@@ -0,0 +1,93 @@
++Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree) Figtree-Italic[wght].ttf: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/frontend/fonts/bricolage-grotesque-latin-wght-normal.woff2 b/frontend/fonts/bricolage-grotesque-latin-wght-normal.woff2
+new file mode 100644
+index 0000000000000000000000000000000000000000..82152a40802e0646b7a732744394a02c8c72772f
+GIT binary patch
+literal 41344
+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
+YwI<BQF4TE|8c%9R&nEr%lN@#(0FC$vmH+?%
+
+literal 0
+HcmV?d00001
+
+diff --git a/frontend/fonts/figtree-latin-wght-normal.woff2 b/frontend/fonts/figtree-latin-wght-normal.woff2
+new file mode 100644
+index 0000000000000000000000000000000000000000..05ce657de89207cf12c6a6457c4a1c83ea520626
+GIT binary patch
+literal 20156
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/frontend/index.html b/frontend/index.html
+new file mode 100644
+index 0000000..394e7f7
+--- /dev/null
++++ b/frontend/index.html
+@@ -0,0 +1,35 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
++  <title>Planting Intelligence</title>
++  <meta name="description" content="Choose your city and see which crops suit its soil and climate, and which ones grow well together.">
++  <meta name="theme-color" content="#2c7a4b">
++  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232c7a4b'/%3E%3Cpath d='M16 26V14' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M16 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 4c0-4-2.5-6.500-7-6.500 0 4 2.500 6.500 7 6.500Z' fill='%23f6c453'/%3E%3C/svg%3E">
++  <link rel="preload" href="fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
++  <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
++  <link rel="stylesheet" href="css/styles.css">
++  <script src="config.js"></script>
++  <script type="module" src="js/main.js"></script>
++</head>
++<body>
++  <a class="skip" href="#main">Skip to content</a>
++  <header class="topbar">
++    <a class="brand" href="#/" aria-label="Planting Intelligence, home">
++      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M16 26V14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M16 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 4c0-4-2.500-6.500-7-6.500 0 4 2.500 6.500 7 6.500Z" fill="#f6c453"/></svg>
++      <span>Planting Intelligence</span>
++    </a>
++    <nav id="crumbs" class="crumbs" aria-label="You are here"></nav>
++    <a class="about-link" href="#/about">About the data</a>
++  </header>
++  <main id="main" tabindex="-1" aria-live="polite" aria-busy="true">
++    <div class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
++    <noscript><p class="notice">This site needs JavaScript to show crops for your city.</p></noscript>
++  </main>
++  <footer class="foot">
++    <p>Planting Intelligence helps smallholder farmers choose what to plant. Scores are guides, not yield forecasts.</p>
++    <p><a href="#/">Cities</a> · <a href="#/about">About the data</a></p>
++  </footer>
++</body>
++</html>
+diff --git a/frontend/js/api.js b/frontend/js/api.js
+new file mode 100644
+index 0000000..6a71f5c
+--- /dev/null
++++ b/frontend/js/api.js
+@@ -0,0 +1,32 @@
++// Talks to the Planting Intelligence API. Answers are kept for the visit so going back is instant.
++
++const base = ((window.PLANTING_CONFIG || {}).apiBase || "").replace(/\/$/, "");
++const kept = new Map();
++const seg = encodeURIComponent;
++
++export class ApiError extends Error {
++  constructor(status, message) { super(message); this.status = status; }
++}
++
++async function get(path) {
++  if (kept.has(path)) return kept.get(path);
++  let response;
++  try { response = await fetch(base + path); }
++  catch { throw new ApiError(0, "network"); }
++  if (!response.ok) {
++    let detail = "";
++    try { detail = (await response.json()).detail; } catch { /* no body */ }
++    throw new ApiError(response.status, detail || "request failed");
++  }
++  const data = await response.json();
++  kept.set(path, data);
++  return data;
++}
++
++export const cities = () => get("/cities");
++export const city = (name) => get(`/cities/${seg(name)}`);
++export const cityPlants = (name) => get(`/cities/${seg(name)}/plants?limit=100`);
++export const cityMonths = (name) => get(`/cities/${seg(name)}/climate/monthly`);
++export const plantInCity = (name, species) => get(`/cities/${seg(name)}/plants/${seg(species)}`);
++export const companions = (name, species) => get(`/cities/${seg(name)}/plants/${seg(species)}/companions`);
++export const model = () => get("/model");
+diff --git a/frontend/js/format.js b/frontend/js/format.js
+new file mode 100644
+index 0000000..269dfea
+--- /dev/null
++++ b/frontend/js/format.js
+@@ -0,0 +1,122 @@
++// Small, pure helpers: safe HTML templating and plain-language wording for the API's codes.
++// Nothing here touches the page, so it can be tested with `node --test frontend/tests`.
++
++const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
++
++export class Raw { constructor(text) { this.text = text; } }
++export const raw = (text) => new Raw(text);
++export const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ESCAPES[c]);
++
++function render(value) {
++  if (value instanceof Raw) return value.text;
++  if (Array.isArray(value)) return value.map(render).join("");
++  if (value === false || value === null || value === undefined) return "";
++  return esc(value);
++}
++
++/** Tagged template: every inserted value is escaped unless it is already html`...` output. */
++export function html(strings, ...values) {
++  let out = strings[0];
++  values.forEach((value, i) => { out += render(value) + strings[i + 1]; });
++  return new Raw(out);
++}
++
++/** Only web links are allowed as hrefs; anything else is dropped. */
++export const safeUrl = (url) => (/^https?:\/\//i.test(url || "") ? url : null);
++
++export const humanize = (code) => {
++  if (!code) return "";
++  const text = String(code).replace(/_/g, " ");
++  return text.charAt(0).toUpperCase() + text.slice(1);
++};
++
++export function countryName(code) {
++  if (!code) return "";
++  try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) || code; }
++  catch { return code; }
++}
++
++const FROST = {
++  frost_free: "No frost", light_frost: "Light frost", moderate_frost: "Moderate frost",
++  heavy_frost: "Heavy frost", severe_frost: "Severe frost",
++};
++export const frostLabel = (zone) => FROST[zone] || humanize(zone) || "Frost unknown";
++
++const MECHANISMS = {
++  nitrogen_fixation: "Feeds the soil with nitrogen",
++  ground_cover: "Shades the soil and keeps it moist",
++  root_complementarity: "Roots share the soil without competing",
++  canopy_complementarity: "Leaves share the light",
++  pest_repulsion: "Keeps pests away",
++  predator_attraction: "Attracts helpful insects",
++  allelopathy: "Holds back weeds and pests",
++  phosphorus_solubilising: "Unlocks phosphorus in the soil",
++};
++export const mechanismLabel = (code) => MECHANISMS[code] || humanize(code) || "Helps its partner";
++
++const EVIDENCE = { scientific: "Backed by research", traditional: "Traditional practice", anecdotal: "Farmer reports" };
++export const evidenceLabel = (level) => EVIDENCE[level] || "Evidence not stated";
++
++export const groupLabel = humanize;
++
++export function number(value, digits = 0) {
++  if (value === null || value === undefined || Number.isNaN(Number(value))) return null;
++  return Number(value).toLocaleString("en", { minimumFractionDigits: digits, maximumFractionDigits: digits });
++}
++
++/** How full the fit bar is: this crop's score compared with the best crop in the city (0 to 1). */
++export const relativeFit = (score, best) => (best > 0 ? Math.max(0, Math.min(1, score / best)) : 0);
++
++export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
++
++/** Plain-language checks of the crop against the city. ok: true / false / null (cannot tell). */
++export function fitChecks(fit, traits, soilPh) {
++  const checks = [];
++  const months = (n) => `${n} month${n === 1 ? "" : "s"}`;
++
++  if (fit.enough_warm_months === null || fit.enough_warm_months === undefined) {
++    checks.push({ ok: null, text: "We do not have enough temperature data to check warm months." });
++  } else {
++    checks.push({
++      ok: fit.enough_warm_months === 1,
++      text: `${months(fit.months_in_optimal_temp)} a year are in its ideal temperature range. It needs about ${months(fit.months_to_mature)} to mature.`,
++    });
++  }
++
++  if (traits && traits.frost_hardy) {
++    checks.push({ ok: true, text: "It is frost hardy, so frost is not a problem." });
++  } else if (fit.enough_frost_free_months === null || fit.enough_frost_free_months === undefined) {
++    checks.push({ ok: null, text: "We do not have enough frost data to check frost-free months." });
++  } else {
++    checks.push({
++      ok: fit.enough_frost_free_months === 1,
++      text: `${months(fit.frost_free_months)} a year are frost free. It needs about ${months(fit.months_to_mature)} to mature.`,
++    });
++  }
++
++  const range = traits && traits.optimal_ph_min !== null && traits.optimal_ph_max !== null
++    ? `${traits.optimal_ph_min} to ${traits.optimal_ph_max}` : null;
++  if (fit.ph_gap === null || fit.ph_gap === undefined) {
++    checks.push({ ok: null, text: "Soil acidity could not be compared, because the soil pH or the crop's pH range is missing." });
++  } else if (Number(fit.ph_gap) === 0) {
++    checks.push({ ok: true, text: `The soil pH (${soilPh}) is inside its ideal range of ${range}.` });
++  } else {
++    checks.push({ ok: false, text: `The soil pH (${soilPh}) is ${number(fit.ph_gap, 1)} outside its ideal range of ${range}.` });
++  }
++  return checks;
++}
++
++/** Turns the raw source text of a trait or pair into a plain status plus the readable detail. */
++export function sourceNote(text) {
++  const t = (text || "").trim();
++  if (!t) return { checked: null, label: "Source not stated", detail: "" };
++  const clean = (s) => s.replace(/\s*See DATA_PROVENANCE\.md\.?/gi, "").replace(/evidence_level/g, "evidence rating")
++    .replace(/\s+in this pass/gi, "").replace(/\s{2,}/g, " ").trim();
++  if (/^VERIFIED\b/i.test(t)) {
++    return { checked: true, label: "Checked against a published source", detail: clean(t.replace(/^VERIFIED\s*[\u2014\u2013-]+\s*/i, "")) };
++  }
++  if (/not (independently |individually )?(source-)?verified/i.test(t)) {
++    return { checked: false, label: "Not yet checked against a paper", detail: clean(t) };
++  }
++  return { checked: null, label: "Source", detail: clean(t) };
++}
+diff --git a/frontend/js/main.js b/frontend/js/main.js
+new file mode 100644
+index 0000000..e2f8f55
+--- /dev/null
++++ b/frontend/js/main.js
+@@ -0,0 +1,61 @@
++// Routing, the breadcrumb bar and page changes.
++
++import { html } from "./format.js";
++import { aboutView, citiesView, cityView, notFoundView, plantView, problem } from "./views.js";
++
++const main = document.getElementById("main");
++const crumbsBar = document.getElementById("crumbs");
++const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
++let visit = 0;
++
++function match() {
++  const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch { return p; } });
++  if (parts.length === 0) return [citiesView, {}];
++  if (parts[0] === "about" && parts.length === 1) return [aboutView, {}];
++  if (parts[0] === "city" && parts.length === 2) return [cityView, { city: parts[1] }];
++  if (parts[0] === "city" && parts[2] === "plant" && parts.length === 4) return [plantView, { city: parts[1], species: parts[3] }];
++  return [notFoundView, {}];
++}
++
++function drawCrumbs(items) {
++  crumbsBar.innerHTML = html`<ol>${items.map((c, i) => c.href && i < items.length - 1
++    ? html`<li><a href="${c.href}">${c.label}</a></li>`
++    : html`<li><span aria-current="page">${c.label}</span></li>`)}</ol>`.text;
++  const current = crumbsBar.querySelector("[aria-current]");
++  if (current) current.scrollIntoView({ inline: "end", block: "nearest" });
++}
++
++function show(view) {
++  const apply = () => {
++    main.innerHTML = view.body.text;
++    main.setAttribute("aria-busy", "false");
++    drawCrumbs(view.crumbs || []);
++    document.title = `${view.title} · Planting Intelligence`;
++    window.scrollTo(0, 0);
++    if (view.after) view.after(main);
++    const heading = main.querySelector("h1");
++    if (heading) heading.focus({ preventScroll: true });
++    const retry = main.querySelector("[data-retry]");
++    if (retry) retry.addEventListener("click", route);
++  };
++  if (document.startViewTransition && !reduced) document.startViewTransition(apply);
++  else apply();
++}
++
++async function route() {
++  const mine = ++visit;
++  const [view, params] = match();
++  main.setAttribute("aria-busy", "true");
++  main.classList.add("loading");
++  try {
++    const result = await view(params);
++    if (mine === visit) show(result);
++  } catch (error) {
++    if (mine === visit) show({ title: "Could not load", crumbs: [{ label: "Cities", href: "#/" }], body: problem(error) });
++  } finally {
++    if (mine === visit) main.classList.remove("loading");
++  }
++}
++
++window.addEventListener("hashchange", route);
++route();
+diff --git a/frontend/js/views.js b/frontend/js/views.js
+new file mode 100644
+index 0000000..cdbbb6f
+--- /dev/null
++++ b/frontend/js/views.js
+@@ -0,0 +1,368 @@
++// The screens. Each view fetches what it needs and returns { title, crumbs, body, after }.
++
++import * as api from "./api.js";
++import {
++  html, safeUrl, humanize, countryName, frostLabel, mechanismLabel, evidenceLabel,
++  groupLabel, number, relativeFit, fitChecks, sourceNote, MONTHS,
++} from "./format.js";
++
++const link = {
++  home: () => "#/",
++  about: () => "#/about",
++  city: (name) => `#/city/${encodeURIComponent(name)}`,
++  plant: (name, species) => `#/city/${encodeURIComponent(name)}/plant/${encodeURIComponent(species)}`,
++};
++
++const LAST_CITY = "planting.lastCity";
++const remember = (name) => { try { localStorage.setItem(LAST_CITY, name); } catch { /* storage blocked */ } };
++const lastCity = () => { try { return localStorage.getItem(LAST_CITY); } catch { return null; } };
++
++const STEMS = [[70, 92, .5], [180, 64, .2], [290, 104, .65], [400, 70, .35], [510, 98, .1], [620, 60, .45], [730, 92, .25],
++  [840, 66, .55], [950, 100, .15], [1060, 62, .4], [1170, 96, .6], [1280, 68, .3], [1390, 102, .05], [1500, 74, .5]];
++
++const sprouts = html`
++<svg class="field" viewBox="0 0 1600 240" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
++  <g class="stems">
++    ${STEMS.map(([x, top, delay]) => html`
++      <g style="--d:${delay}s">
++        <path class="stem" pathLength="1" d="M${x} 168 C${x} ${168 - (168 - top) * 0.45}, ${x + 6} ${top + 30}, ${x + 3} ${top}"/>
++        <path class="leaf" d="M${x + 3} ${top} q 26 -20 46 -4 q -20 22 -46 4z"/>
++        <path class="leaf leaf-b" d="M${x + 3} ${top + 26} q -26 -18 -44 -2 q 20 20 44 2z"/>
++      </g>`)}
++  </g>
++  <path class="soil soil-1" d="M0 168 C240 160 520 176 800 168 S1360 160 1600 170 V240 H0Z"/>
++  <path class="soil soil-2" d="M0 190 C280 182 600 198 880 190 S1400 184 1600 192 V240 H0Z"/>
++  <path class="soil soil-3" d="M0 214 C320 208 640 220 920 214 S1440 210 1600 216 V240 H0Z"/>
++</svg>`;
++
++function problem(error, retry) {
++  const offline = error.status === 0;
++  const text = offline
++    ? "We could not reach the server. Check your connection and try again."
++    : error.status === 404 ? "We could not find that page."
++      : error.status === 503 ? "The data is being updated. Try again in a few minutes."
++        : "Something went wrong on our side. Try again in a moment.";
++  return html`
++    <section class="notice" role="alert">
++      <h1>${error.status === 404 ? "Not found" : "Could not load this page"}</h1>
++      <p>${text}</p>
++      <div class="actions">
++        ${error.status === 404 ? "" : html`<button class="button" type="button" data-retry>Try again</button>`}
++        <a class="button ghost" href="${link.home()}">Choose a city</a>
++      </div>
++    </section>`;
++}
++export { problem };
++
++// ---------- Screen 1: choose a city ----------
++
++export async function citiesView() {
++  const cities = await api.cities();
++  const saved = lastCity();
++  const again = cities.find((c) => c.city === saved);
++
++  const card = (c) => html`
++    <a class="city-card ${c.has_recommendations ? "" : "is-quiet"}" href="${link.city(c.city)}" data-name="${(c.city + " " + countryName(c.country)).toLowerCase()}">
++      <span class="city-name">${c.city}</span>
++      <span class="city-country">${countryName(c.country)}</span>
++      <span class="city-meta">${frostLabel(c.frost_zone)}${c.has_recommendations ? "" : " · no crop advice yet"}</span>
++    </a>`;
++
++  return {
++    title: "Choose your city",
++    crumbs: [{ label: "Cities" }],
++    body: html`
++      <section class="hero">
++        ${sprouts}
++        <div class="hero-text">
++          <h1>What will grow well where you live?</h1>
++          <p class="lede">Choose your city. You will see the crops that suit its soil and climate, and which ones grow well side by side.</p>
++          <label class="search">
++            <span class="sr-only">Search for your city</span>
++            <input id="city-search" type="search" placeholder="Search for your city" autocomplete="off" enterkeyhint="go">
++          </label>
++          ${again ? html`<p class="again">Last time: <a href="${link.city(again.city)}">${again.city}</a></p>` : ""}
++        </div>
++      </section>
++      <section aria-label="Cities">
++        <div class="city-grid" id="city-grid">${cities.map(card)}</div>
++        <p class="empty" id="city-none" hidden>No city matches that search. Check the spelling, or clear the search to see all ${cities.length} cities.</p>
++      </section>`,
++    after(root) {
++      const input = root.querySelector("#city-search");
++      const cards = [...root.querySelectorAll(".city-card")];
++      const none = root.querySelector("#city-none");
++      const apply = () => {
++        const q = input.value.trim().toLowerCase();
++        let shown = 0;
++        cards.forEach((c) => { const hit = !q || c.dataset.name.includes(q); c.hidden = !hit; shown += hit ? 1 : 0; });
++        none.hidden = shown > 0;
++      };
++      input.addEventListener("input", apply);
++      input.addEventListener("keydown", (e) => {
++        if (e.key === "Enter") { const first = cards.find((c) => !c.hidden); if (first) first.click(); }
++      });
++    },
++  };
++}
++
++// ---------- Screen 2: crops for one city ----------
++
++function statTile(kind, label, value, note) {
++  return html`
++    <div class="stat stat-${kind}">
++      <dt>${label}</dt>
++      <dd class="${value === null ? "unknown" : ""}">${value ?? "Not measured"}</dd>
++      ${note ? html`<dd class="note">${note}</dd>` : ""}
++    </div>`;
++}
++
++function yearStrip(months) {
++  const temps = months.map((m) => m.avg_temp_c).filter((t) => t !== null);
++  if (!temps.length) return "";
++  const low = Math.min(...temps), high = Math.max(...temps), span = Math.max(high - low, 1);
++  const good = months.filter((m) => m.is_good_planting_month).length;
++  return html`
++    <section class="panel" aria-labelledby="year-title">
++      <h2 id="year-title">The year here</h2>
++      <p class="muted">${good ? `${good} month${good === 1 ? " is" : "s are"} good for planting (highlighted).` : "No month meets the planting rule below."}
++        A good planting month is 15 to 35 °C, with no frost and at least 20 mm of rain. Averages over ten years.</p>
++      <ol class="year" role="list">
++        ${months.map((m) => html`
++          <li class="${m.is_good_planting_month ? "good" : ""}">
++            <span class="bar-wrap"><span class="bar" style="--h:${m.avg_temp_c === null ? 8 : 22 + ((m.avg_temp_c - low) / span) * 78}%"></span></span>
++            <span class="t">${m.avg_temp_c === null ? "–" : `${Math.round(m.avg_temp_c)}°`}</span>
++            <span class="rain" title="Average rain">${m.avg_monthly_rain_mm === null ? "–" : `${Math.round(m.avg_monthly_rain_mm)}`}</span>
++            <span class="m">${MONTHS[m.month - 1]}</span>
++          </li>`)}
++      </ol>
++      <p class="legend"><span class="dot t"></span>Temperature (°C) <span class="dot r"></span>Rain (mm a month)</p>
++    </section>`;
++}
++
++export async function cityView({ city: name }) {
++  const [detail, ranked, months] = await Promise.all([api.city(name), api.cityPlants(name), api.cityMonths(name)]);
++  remember(detail.city);
++  const plants = ranked.plants;
++  const best = plants.length ? plants[0].suitability_score : 0;
++  const groups = [...new Set(plants.map((p) => p.functional_group).filter(Boolean))].sort();
++
++  const SHOWN_FIRST = 12;
++  const plantCard = (p, i) => html`
++    <a class="plant-card" href="${link.plant(detail.city, p.species)}" data-group="${p.functional_group || ""}" data-extra="${i >= SHOWN_FIRST ? "1" : ""}">
++      <span class="rank" aria-label="Rank ${p.rank_in_city}">${p.rank_in_city}</span>
++      <span class="plant-main">
++        <span class="plant-name">${p.common_name || p.species}</span>
++        <span class="latin">${p.species}</span>
++        <span class="tags">
++          ${p.functional_group ? html`<span class="tag">${groupLabel(p.functional_group)}</span>` : ""}
++          <span class="tag ${p.observed_nearby ? "tag-yes" : "tag-no"}">${p.observed_nearby ? "Recorded nearby" : "Not recorded nearby"}</span>
++        </span>
++      </span>
++      <span class="fit" role="img" aria-label="Match compared with the best crop here: ${Math.round(relativeFit(p.suitability_score, best) * 100)} percent">
++        <span class="fit-bar"><i style="--w:${(relativeFit(p.suitability_score, best) * 100).toFixed(0)}%"></i></span>
++        <span class="fit-label">${p.rank_in_city === 1 ? "Best match here" : `${Math.round(relativeFit(p.suitability_score, best) * 100)}% of the best`}</span>
++      </span>
++    </a>`;
++
++  const goodMonths = months.filter((m) => m.is_good_planting_month).length;
++  const stats = html`
++    <dl class="stats">
++      ${statTile("soil", "Soil acidity (pH)", number(detail.soil_ph, 1), detail.ph_band ? humanize(detail.ph_band) : null)}
++      ${statTile("soil", "Soil type", detail.soil_texture_class ? humanize(detail.soil_texture_class) : null,
++        detail.clay_pct !== null ? `${number(detail.clay_pct, 0)}% clay` : null)}
++      ${statTile("rain", "Rain a year", detail.avg_annual_precip_mm !== null ? `${number(detail.avg_annual_precip_mm)} mm` : null,
++        detail.rainfall_band ? humanize(detail.rainfall_band) : null)}
++      ${statTile("frost", "Frost", frostLabel(detail.frost_zone),
++        detail.avg_frost_days_per_year !== null ? `${number(detail.avg_frost_days_per_year, 0)} frost days a year` : null)}
++      ${statTile("heat", "Good planting months", months.length ? `${goodMonths} of 12` : null, null)}
++    </dl>`;
++
++  const advice = ranked.recommendations_available
++    ? html`
++      <section class="panel" aria-labelledby="crops-title">
++        <h2 id="crops-title">Crops for ${detail.city}</h2>
++        <p class="muted">Ranked by how closely each crop matches the crops people have recorded near ${detail.city}. This is a guide, not a yield forecast.
++          The bar compares each crop with the best match here. <a href="${link.about()}">How to read this</a></p>
++        <div class="chips" role="group" aria-label="Filter by type of crop">
++          <button type="button" class="chip is-on" data-filter="">All</button>
++          ${groups.map((g) => html`<button type="button" class="chip" data-filter="${g}">${groupLabel(g)}</button>`)}
++        </div>
++        <div class="plant-list" id="plant-list">${plants.map(plantCard)}</div>
++        ${plants.length > SHOWN_FIRST ? html`<p class="more"><button class="button ghost" type="button" data-more>Show all ${plants.length} crops</button></p>` : ""}
++      </section>`
++    : html`
++      <section class="notice" role="status">
++        <h2>No crop advice for ${detail.city} yet</h2>
++        <p>${ranked.message}</p>
++        <div class="actions"><a class="button" href="${link.home()}">Choose another city</a></div>
++      </section>`;
++
++  return {
++    title: detail.city,
++    crumbs: [{ label: "Cities", href: link.home() }, { label: detail.city }],
++    body: html`
++      <a class="back" href="${link.home()}">Back to cities</a>
++      <header class="page-head">
++        <h1 tabindex="-1">${detail.city}</h1>
++        <p class="sub">${countryName(detail.country)}</p>
++      </header>
++      ${stats}
++      ${advice}
++      ${yearStrip(months)}`,
++    after(root) {
++      const chips = [...root.querySelectorAll(".chip")];
++      const cards = [...root.querySelectorAll(".plant-card")];
++      const more = root.querySelector("[data-more]");
++      let group = "", expanded = false;
++      const apply = () => {
++        cards.forEach((card) => {
++          const inGroup = group === "" || card.dataset.group === group;
++          card.hidden = !(inGroup && (group !== "" || expanded || card.dataset.extra !== "1"));
++        });
++        if (more) more.parentElement.hidden = group !== "" || expanded;
++      };
++      chips.forEach((chip) => chip.addEventListener("click", () => {
++        group = chip.dataset.filter;
++        chips.forEach((c) => c.classList.toggle("is-on", c === chip));
++        apply();
++      }));
++      if (more) more.addEventListener("click", () => { expanded = true; apply(); });
++      apply();
++    },
++  };
++}
++
++// ---------- Screen 3: companions for one crop ----------
++
++function sourceLine(text, url) {
++  const note = sourceNote(text);
++  return html`
++    <p class="source">
++      <span class="src-status ${note.checked === true ? "is-checked" : note.checked === false ? "is-open" : ""}">${note.label}</span>
++      ${note.detail}${url ? html` <a href="${url}" target="_blank" rel="noopener noreferrer">Read the source</a>` : ""}
++    </p>`;
++}
++
++function companionCard(c, own, cityName) {
++  const url = safeUrl(c.source_url);
++  const name = c.partner_common_name || c.partner;
++  const open = c.partner_rank_in_city !== null && c.partner_rank_in_city !== undefined;
++  return html`
++    <article class="pair">
++      <header class="pair-head">
++        <span class="pair-names"><b>${own}</b><span class="plus" aria-hidden="true">+</span><b>${name}</b></span>
++        <span class="badges">
++          <span class="tag tag-yes">${c.relationship === "neutral" ? "Compatible" : "Helps each other"}</span>
++          <span class="tag">${evidenceLabel(c.evidence_level)}</span>
++        </span>
++      </header>
++      <h3>${mechanismLabel(c.mechanism)}</h3>
++      <p class="why">${c.notes || "No explanation has been written for this pair yet."}</p>
++      ${sourceLine(c.evidence_source, url)}
++      ${open
++        ? html`<a class="button ghost small" href="${link.plant(cityName, c.partner)}">See ${name} in ${cityName}</a>`
++        : html`<p class="muted small">${name} has no ranking in ${cityName}.</p>`}
++    </article>`;
++}
++
++export async function plantView({ city: cityName, species }) {
++  const [detail, plant, pairs] = await Promise.all([api.city(cityName), api.plantInCity(cityName, species), api.companions(cityName, species)]);
++  remember(detail.city);
++  const own = plant.common_name || plant.species;
++  const t = plant.traits;
++  const checks = fitChecks(plant.fit, t, detail.soil_ph);
++  const range = (a, b, unit = "") => (a === null || b === null ? null : `${a} to ${b}${unit}`);
++  const needs = [
++    ["Soil pH", range(t.optimal_ph_min, t.optimal_ph_max)],
++    ["Temperature", range(t.optimal_temp_min_c, t.optimal_temp_max_c, " °C")],
++    ["Time to mature", range(t.days_to_maturity_min, t.days_to_maturity_max, " days")],
++    ["Water need", t.water_demand ? humanize(t.water_demand) : null],
++    ["Drought tolerance", t.drought_tolerance ? humanize(t.drought_tolerance) : null],
++    ["Frost", t.frost_hardy === null ? null : t.frost_hardy ? "Frost hardy" : "Not frost hardy"],
++    ["Role for the soil", t.nitrogen_role ? humanize(t.nitrogen_role) : null],
++  ];
++
++  return {
++    title: `${own} in ${detail.city}`,
++    crumbs: [{ label: "Cities", href: link.home() }, { label: detail.city, href: link.city(detail.city) }, { label: own }],
++    body: html`
++      <a class="back" href="${link.city(detail.city)}">Back to crops for ${detail.city}</a>
++      <header class="page-head">
++        <h1 tabindex="-1">${own}</h1>
++        <p class="sub"><span class="latin">${plant.species}</span>${plant.functional_group ? ` · ${groupLabel(plant.functional_group)}` : ""}</p>
++        <p class="tags"><span class="tag">Rank ${plant.rank_in_city} in ${detail.city}</span>
++          <span class="tag ${plant.observed_nearby ? "tag-yes" : "tag-no"}">${plant.observed_nearby ? "Recorded nearby" : "Not recorded nearby"}</span></p>
++      </header>
++
++      <section class="panel" aria-labelledby="pairs-title">
++        <h2 id="pairs-title">Grows well with</h2>
++        ${pairs.length
++          ? html`<p class="muted">Crops that help ${own} when planted close by, and why. Only crops recorded near ${detail.city} are listed.</p>
++                 <div class="pairs">${pairs.map((c) => companionCard(c, own, detail.city))}</div>`
++          : html`<p class="empty-inline">No companion crop is listed for ${own} near ${detail.city}. Our companion list is written by hand and is still short, so this does not mean ${own} has no good partners.</p>`}
++      </section>
++
++      <section class="panel two" aria-labelledby="rank-title">
++        <div>
++          <h2 id="rank-title">How ${own} fits ${detail.city}</h2>
++          <ul class="checks">
++            ${checks.map((c) => html`<li class="${c.ok === true ? "yes" : c.ok === false ? "no" : "maybe"}"><span class="mark" aria-hidden="true"></span><span><span class="sr-only">${c.ok === true ? "Good: " : c.ok === false ? "Problem: " : "Unknown: "}</span>${c.text}</span></li>`)}
++          </ul>
++        </div>
++        <div>
++          <h2>What the model weighed</h2>
++          ${plant.reasons.length
++            ? html`<ol class="reasons">${plant.reasons.map((r) => html`<li>${r.text}</li>`)}</ol>`
++            : html`<p class="muted">No single factor stood out for this crop.</p>`}
++          <p class="muted small">These show how the model scored this crop. They are not proof of what makes it grow.</p>
++        </div>
++      </section>
++
++      <section class="panel" aria-labelledby="needs-title">
++        <h2 id="needs-title">What ${own} needs</h2>
++        <dl class="needs">
++          ${needs.map(([label, value]) => html`<div><dt>${label}</dt><dd class="${value === null ? "unknown" : ""}">${value ?? "Not known"}</dd></div>`)}
++        </dl>
++        ${t.notes ? html`<p class="muted">${t.notes}</p>` : ""}
++        ${sourceLine(t.trait_source, safeUrl(t.source_url))}
++      </section>`,
++  };
++}
++
++// ---------- About ----------
++
++export async function aboutView() {
++  let info = null;
++  try { info = await api.model(); } catch { /* the page still explains the data */ }
++  const share = info && info.share_recorded !== null ? Math.round(info.share_recorded * 100) : null;
++  return {
++    title: "About the data",
++    crumbs: [{ label: "Cities", href: link.home() }, { label: "About the data" }],
++    body: html`
++      <a class="back" href="${link.home()}">Back to cities</a>
++      <header class="page-head"><h1 tabindex="-1">About the data</h1>
++        <p class="sub">What the scores mean, and what they do not.</p></header>
++      <section class="panel prose">
++        <h2>What a score means</h2>
++        <p>Each crop is compared with the crops people have recorded growing near the city. A crop that looks like those has a higher rank. It is a guide to what is likely to suit a place, not a promise of yield.</p>
++        <h2>Where the information comes from</h2>
++        <ul>
++          <li>Crop records: GBIF, within 100 km of each city.</li>
++          <li>Soil: the WoSIS soil database. Where a city has no measurement, we show it as not measured instead of guessing.</li>
++          <li>Climate: ten-year averages from NASA.</li>
++          <li>Companion crops and crop needs: a hand-written list. Every entry shows its source, including when it has not yet been checked against a paper.</li>
++        </ul>
++        ${info ? html`
++          <h2>How well it works</h2>
++          <p>${info.verdict}</p>
++          <p class="muted">${info.rows} crop and city pairs across ${info.cities} cities were tested${share !== null ? `; ${share}% of them were recorded nearby` : ""}. Each city was scored by a model that had never seen it.</p>` : ""}
++        <h2>Keep in mind</h2>
++        <ul>${(info ? info.caveats : []).map((c) => html`<li>${c}</li>`)}</ul>
++      </section>`,
++  };
++}
++
++export function notFoundView() {
++  return { title: "Not found", crumbs: [{ label: "Cities", href: link.home() }], body: problem({ status: 404 }) };
++}
+diff --git a/frontend/tests/format.test.mjs b/frontend/tests/format.test.mjs
+new file mode 100644
+index 0000000..5aa0bef
+--- /dev/null
++++ b/frontend/tests/format.test.mjs
+@@ -0,0 +1,70 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { sourceNote, html, esc, safeUrl, mechanismLabel, evidenceLabel, relativeFit, fitChecks, frostLabel, number } from "../js/format.js";
++
++test("html escapes inserted text but keeps nested html", () => {
++  const evil = '<img src=x onerror="alert(1)">';
++  assert.equal(html`<p>${evil}</p>`.text, "<p>&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</p>");
++  const inner = html`<b>${"a&b"}</b>`;
++  assert.equal(html`<p>${inner}</p>`.text, "<p><b>a&amp;b</b></p>");
++  assert.equal(html`${[html`<i>1</i>`, "<"]}`.text, "<i>1</i>&lt;");
++  assert.equal(html`${null}${false}${undefined}`.text, "");
++});
++
++test("only web links are kept", () => {
++  assert.equal(safeUrl("https://pmc.ncbi.nlm.nih.gov/x"), "https://pmc.ncbi.nlm.nih.gov/x");
++  assert.equal(safeUrl("javascript:alert(1)"), null);
++  assert.equal(safeUrl(""), null);
++  assert.equal(esc(`"'<`), "&quot;&#39;&lt;");
++});
++
++test("codes become plain wording, unknown codes stay readable", () => {
++  assert.equal(mechanismLabel("nitrogen_fixation"), "Feeds the soil with nitrogen");
++  assert.equal(mechanismLabel("new_thing"), "New thing");
++  assert.equal(evidenceLabel("scientific"), "Backed by research");
++  assert.equal(frostLabel("frost_free"), "No frost");
++  assert.equal(number(1559.2), "1,559");
++  assert.equal(number(null), null);
++});
++
++test("fit bar is relative to the best crop and stays between 0 and 1", () => {
++  assert.equal(relativeFit(0.2, 0.4), 0.5);
++  assert.equal(relativeFit(0.5, 0.4), 1);
++  assert.equal(relativeFit(0.2, 0), 0);
++});
++
++test("fit checks say what passed, what failed and what could not be checked", () => {
++  const traits = { frost_hardy: false, optimal_ph_min: 5.8, optimal_ph_max: 7 };
++  const good = fitChecks({ enough_warm_months: 1, months_in_optimal_temp: 9, months_to_mature: 2,
++    enough_frost_free_months: 1, frost_free_months: 12, ph_gap: 0 }, traits, 5.9);
++  assert.deepEqual(good.map((c) => c.ok), [true, true, true]);
++  assert.match(good[2].text, /inside its ideal range of 5.8 to 7/);
++
++  const mixed = fitChecks({ enough_warm_months: 0, months_in_optimal_temp: 1, months_to_mature: 1,
++    enough_frost_free_months: null, frost_free_months: null, ph_gap: 1.25 }, traits, 4.5);
++  assert.deepEqual(mixed.map((c) => c.ok), [false, null, false]);
++  assert.match(mixed[0].text, /1 month a year/);
++  assert.match(mixed[2].text, /1\.3 outside/);
++
++  const hardy = fitChecks({ enough_warm_months: null, enough_frost_free_months: null, ph_gap: null },
++    { frost_hardy: true, optimal_ph_min: null, optimal_ph_max: null }, 6);
++  assert.deepEqual(hardy.map((c) => c.ok), [null, true, null]);
++});
++
++test("source notes become plain statuses without internal file names", () => {
++  const checked = sourceNote("VERIFIED \u2014 Zhang et al. (2014), Annals of Botany. Real study.");
++  assert.equal(checked.checked, true);
++  assert.equal(checked.detail, "Zhang et al. (2014), Annals of Botany. Real study.");
++
++  const open = sourceNote("Not independently verified in this pass \u2014 evidence_level as originally assigned by estimate. See DATA_PROVENANCE.md.");
++  assert.equal(open.checked, false);
++  assert.equal(open.label, "Not yet checked against a paper");
++  assert.ok(!/DATA_PROVENANCE|evidence_level|in this pass/.test(open.detail));
++
++  const traits = sourceNote("General agronomic reference \u2014 not individually source-verified in this pass. See DATA_PROVENANCE.md. Root depth: FAO-56.");
++  assert.equal(traits.checked, false);
++  assert.match(traits.detail, /Root depth: FAO-56/);
++
++  assert.equal(sourceNote("").label, "Source not stated");
++  assert.equal(sourceNote("FAO-56 Table 22").checked, null);
++});
+diff --git a/tests/api/test_api.py b/tests/api/test_api.py
+index c908ea6..f358642 100644
+--- a/tests/api/test_api.py
++++ b/tests/api/test_api.py
+@@ -32,7 +32,7 @@ CREATE TABLE mart_plant_profiles (species, common_name, family, functional_group
+   optimal_ph_max, optimal_temp_min_c, optimal_temp_max_c, days_to_maturity_min, days_to_maturity_max, notes,
+   trait_source, source_url);
+ CREATE TABLE mart_city_companions (city, pair_rank, species_a, species_b, mechanism, benefit_category,
+-  evidence_level, relationship_score, notes);
++  evidence_level, relationship_score, relationship, notes, evidence_source, source_url);
+ CREATE TABLE ml_species_city_suitability (city, species, observed_nearby, suitability_score, rank_in_city);
+ CREATE TABLE ml_species_city_explanations (city, species, reason_rank, feature, feature_label, feature_value,
+   effect, contribution, reason);
+@@ -73,7 +73,8 @@ def client(tmp_path, monkeypatch):
+              'Soil pH distance outside the ideal range: 0 raises its score compared with others in Lagos')"""))
+         c.execute(text("""INSERT INTO mart_city_companions VALUES
+             ('Lagos',1,'Zea mays','Phaseolus vulgaris','nitrogen_fixation','nutrient_sharing',
+-             'scientific',9,'Three Sisters')"""))
++             'scientific',9,'beneficial','Beans fix nitrogen that feeds maize',
++             'VERIFIED - Zhang 2014','https://example.org/z')"""))
+ 
+     report = tmp_path / "report.json"
+     report.write_text(json.dumps({"verdict": "The model beats the best simple baseline.", "rows": 6, "cities": 2,
+@@ -160,6 +161,24 @@ def test_companions(client):
+     assert client.get("/cities/Nairobi/companions").json() == []
+ 
+ 
++def test_companions_of_a_plant_work_from_either_side_of_the_pair(client):
++    maize = client.get("/cities/Lagos/plants/Zea mays/companions").json()
++    bean = client.get("/cities/lagos/plants/phaseolus vulgaris/companions").json()
++    assert [c["partner"] for c in maize] == ["Phaseolus vulgaris"]
++    assert [c["partner"] for c in bean] == ["Zea mays"]
++    pair = maize[0]
++    assert pair["partner_common_name"] == "Common Bean"
++    assert pair["partner_rank_in_city"] == 2                 # the partner's own rank in Lagos
++    assert pair["notes"] == "Beans fix nitrogen that feeds maize"
++    assert pair["evidence_source"].startswith("VERIFIED") and pair["source_url"]
++    assert bean[0]["partner_rank_in_city"] == 1
++
++
++def test_plant_without_companions_in_a_city_gets_an_empty_list(client):
++    assert client.get("/cities/Nairobi/plants/Zea mays/companions").json() == []
++    assert client.get("/cities/Lagos/plants/Banana/companions").status_code == 404
++
++
+ def test_plant_catalogue(client):
+     assert [p["species"] for p in client.get("/plants").json()] == ["Phaseolus vulgaris", "Zea mays"]
+     assert [p["species"] for p in client.get("/plants?search=maize").json()] == ["Zea mays"]
+-- 
+2.43.0
+

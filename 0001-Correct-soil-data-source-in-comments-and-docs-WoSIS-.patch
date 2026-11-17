@@ -1,0 +1,69 @@
+From 2a204915a4b87a5d3a5276b96f3eadb04fcd64cc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 7 Oct 2026 22:13:00 +0300
+Subject: [PATCH 1/2] Correct soil data source in comments and docs: WoSIS
+ field profiles, not SoilGrids
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ dbt/models/marts/schema.yml     |  2 +-
+ dbt/models/staging/schema.yml   |  4 ++--
+ dbt/models/staging/stg_soil.sql | 12 ++++++++----
+ 3 files changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/dbt/models/marts/schema.yml b/dbt/models/marts/schema.yml
+index ef7818b..b24129b 100644
+--- a/dbt/models/marts/schema.yml
++++ b/dbt/models/marts/schema.yml
+@@ -27,7 +27,7 @@ models:
+         tests:
+           - not_null
+       - name: soil_ph
+-        description: Soil pH 0-14. Empty when SoilGrids returned no valid reading (never guessed).
++        description: Soil pH 0-14. Empty when no nearby WoSIS profile has a pH measurement (never guessed).
+       - name: current_conditions_score
+         description: 100 minus penalty points for today's frost, heat, water stress, low nitrogen and flood risk (10-100). Same in all 12 months of a city.
+         tests:
+diff --git a/dbt/models/staging/schema.yml b/dbt/models/staging/schema.yml
+index 0959c20..af1f304 100644
+--- a/dbt/models/staging/schema.yml
++++ b/dbt/models/staging/schema.yml
+@@ -17,12 +17,12 @@ sources:
+           - name: ingested_at
+             description: Timestamp when the Airflow pipeline wrote this row
+       - name: soil
+-        description: Soil composition at 0-5cm depth from ISRIC SoilGrids.
++        description: Soil at 0-5cm depth, averaged from nearby ISRIC WoSIS field-measured profiles (about 55-220 km).
+         columns:
+           - name: city
+             description: City name — join key across all tables
+           - name: phh2o_0_5cm
+-            description: Soil pH multiplied by 10 (stored as integer by SoilGrids)
++            description: Soil pH multiplied by 10 (stored as an integer by the fetch script). Empty when no nearby profile has a pH measurement.
+       - name: weather
+         description: Current weather snapshot from OpenWeatherMap.
+         columns:
+diff --git a/dbt/models/staging/stg_soil.sql b/dbt/models/staging/stg_soil.sql
+index 19c47e1..3e0481c 100644
+--- a/dbt/models/staging/stg_soil.sql
++++ b/dbt/models/staging/stg_soil.sql
+@@ -1,7 +1,11 @@
+--- Soil composition per city (ISRIC SoilGrids, 0-5 cm depth). Latest row per city.
+--- Raw SoilGrids units are converted to everyday units:
+---   clay/sand/silt: g/kg -> %      pH: tenths -> pH units
+---   organic carbon: dg/kg -> g/kg  nitrogen: cg/kg -> g/kg
++-- Soil per city, top layer (0-5 cm). Latest row per city.
++-- Source: ISRIC WoSIS field-measured soil profiles. For each city the fetch script averages
++-- the profiles found within about 55 km (widened to about 220 km if none), weighted by
++-- distance. So these are estimates from nearby measurements, not the city's own soil.
++-- A property with no measurement in that area is left empty (for example pH for Berlin).
++-- The fetch script stores values scaled up; this model scales them back to everyday units:
++--   clay/sand/silt: x10 -> %      pH: x10 -> pH units
++--   organic carbon: x10 -> g/kg   nitrogen: x100 -> g/kg
+ 
+ {{ config(materialized='view') }}
+ 
+-- 
+2.43.0
+

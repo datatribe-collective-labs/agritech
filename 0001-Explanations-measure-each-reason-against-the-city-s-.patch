@@ -1,0 +1,119 @@
+From 3a8996ce92b53f9099eb0d7c9d438173d5fb1e13 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 23:06:08 +0300
+Subject: [PATCH] Explanations: measure each reason against the city's average
+ crop
+
+On production data the top reasons for Berlin's three best crops were identical (growing
+degree days, rainfall): city-wide features lift or lower every crop in a city equally, so
+they do not explain why one crop ranks above another. Each contribution now has the city's
+average removed, and effects below 0.01 log-odds are not reported as reasons.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ ml/explainability/explain_suitability.py | 16 +++++++++---
+ ml/tests/test_suitability.py             | 33 +++++++++++++++---------
+ 2 files changed, 34 insertions(+), 15 deletions(-)
+
+diff --git a/ml/explainability/explain_suitability.py b/ml/explainability/explain_suitability.py
+index ccffc96..66ace75 100644
+--- a/ml/explainability/explain_suitability.py
++++ b/ml/explainability/explain_suitability.py
+@@ -7,6 +7,11 @@ HOW IT WORKS
+   pushed the score up; a negative one pulled it down. The contributions and a base level
+   add up to the model's score (in log-odds, the scale the model works on internally).
+ 
++  Reasons are measured against the city's average crop. City-wide facts such as rainfall
++  lift or lower every crop in the city equally, so they say nothing about why one crop
++  ranks above another. Subtracting the city's average removes them and leaves what is
++  different about THIS crop in THIS city.
++
+   train_suitability.py takes the contributions from the same leave-one-city-out model that
+   produced each score, so the reasons never come from a model that saw that city.
+ 
+@@ -19,7 +24,7 @@ HOW TO READ IT
+ import numpy as np
+ import pandas as pd
+ 
+-MIN_EFFECT = 1e-6  # contributions smaller than this are treated as "no effect"
++MIN_EFFECT = 0.01  # contributions (log-odds) smaller than this are treated as "no effect"
+ 
+ # Plain wording for each feature the suitability model uses.
+ FEATURE_LABELS = {
+@@ -64,12 +69,16 @@ def build_explanations(rows: pd.DataFrame, contributions: pd.DataFrame, top_k: i
+     rows           the species-city table, one row per score (needs city, species and the features)
+     contributions  same length and order as rows, one column per feature (log-odds)
+ 
++    Each contribution is first measured against the average crop in the same city.
++
+     A score gets fewer than top_k reasons if fewer features had any effect on it.
+     Returns one row per score and reason, strongest first: city, species, reason_rank,
+-    feature, feature_label, feature_value, effect ('raises' or 'lowers'), contribution, reason.
++    feature, feature_label, feature_value, effect ('raises' or 'lowers'),
++    contribution (against the city's average crop), reason.
+     """
+     rows = rows.reset_index(drop=True)
+     contributions = contributions.reset_index(drop=True)
++    contributions = contributions - contributions.groupby(rows["city"]).transform("mean")
+ 
+     records = []
+     for i in range(len(rows)):
+@@ -88,7 +97,8 @@ def build_explanations(rows: pd.DataFrame, contributions: pd.DataFrame, top_k: i
+                 "feature_value": None if pd.isna(value) else float(value),
+                 "effect": effect,
+                 "contribution": round(float(contributions.at[i, feature]), 4),
+-                "reason": f"{label}: {_format_value(value)} {effect} the score",
++                "reason": (f"{label}: {_format_value(value)} {effect} its score "
++                           f"compared with other crops in {rows.at[i, 'city']}"),
+             })
+     return pd.DataFrame.from_records(records)
+ 
+diff --git a/ml/tests/test_suitability.py b/ml/tests/test_suitability.py
+index 0bca73b..5889a40 100644
+--- a/ml/tests/test_suitability.py
++++ b/ml/tests/test_suitability.py
+@@ -210,19 +210,28 @@ def test_explanations_come_with_each_score_and_name_the_informative_features():
+ 
+ 
+ def test_explanation_wording_by_hand():
+-    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"],
+-                         "soil_ph": [5.5], "frost_free_months": [5.0], "ph_gap": [np.nan]})
+-    contributions = pd.DataFrame({"soil_ph": [-0.2], "frost_free_months": [-1.5], "ph_gap": [0.6]})
+-    reasons = ex.build_explanations(rows, contributions, top_k=2)
++    rows = pd.DataFrame({"city": ["Oulu", "Oulu"], "species": ["Zea mays", "Avena"],
++                         "soil_ph": [5.5, 5.5], "frost_free_months": [5.0, 12.0],
++                         "ph_gap": [np.nan, 0.0]})
++    contributions = pd.DataFrame({"soil_ph": [0.5, 0.5],             # same for both crops: a city-wide effect
++                                  "frost_free_months": [-1.0, 1.0],
++                                  "ph_gap": [0.4, 0.0]})
++    reasons = ex.build_explanations(rows, contributions, top_k=3)
++    maize = reasons[reasons["species"] == "Zea mays"].reset_index(drop=True)
+ 
+-    assert list(reasons["feature"]) == ["frost_free_months", "ph_gap"]          # strongest first
+-    assert reasons.loc[0, "reason"] == "Frost-free months: 5 lowers the score"
+-    assert reasons.loc[1, "reason"] == "Soil pH distance outside the crop's ideal range: unknown raises the score"
+-    assert pd.isna(reasons.loc[1, "feature_value"])
++    assert list(maize["feature"]) == ["frost_free_months", "ph_gap"]    # strongest first; soil_ph drops out
++    assert maize.loc[0, "reason"] == "Frost-free months: 5 lowers its score compared with other crops in Oulu"
++    assert maize.loc[1, "reason"] == ("Soil pH distance outside the crop's ideal range: unknown raises its score "
++                                      "compared with other crops in Oulu")
++    assert pd.isna(maize.loc[1, "feature_value"])
+ 
+ 
+-def test_features_with_no_effect_are_not_reasons():
+-    rows = pd.DataFrame({"city": ["Oulu"], "species": ["Zea mays"], "soil_ph": [5.5], "clay_pct": [20.0]})
+-    contributions = pd.DataFrame({"soil_ph": [0.0], "clay_pct": [0.4]})
++def test_city_wide_effects_are_not_reasons():
++    # soil_ph pushes both crops up equally, so it explains the city, not the difference between crops
++    rows = pd.DataFrame({"city": ["Oulu", "Oulu"], "species": ["a", "b"],
++                         "soil_ph": [5.5, 5.5], "clay_pct": [20.0, 20.0]})
++    contributions = pd.DataFrame({"soil_ph": [0.9, 0.9], "clay_pct": [0.4, -0.4]})
+     reasons = ex.build_explanations(rows, contributions, top_k=3)
+-    assert list(reasons["feature"]) == ["clay_pct"]
++    assert set(reasons["feature"]) == {"clay_pct"}
++    assert list(reasons.loc[reasons["species"] == "a", "effect"]) == ["raises"]
++    assert list(reasons.loc[reasons["species"] == "b", "effect"]) == ["lowers"]
+-- 
+2.43.0
+

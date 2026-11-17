@@ -1,0 +1,124 @@
+From 60e5f7d891faf7ad3d86ec838cc0db5a5cb1f942 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 17:35:20 +0300
+Subject: [PATCH] API: say the true reason a city has no scores (no soil pH vs
+ no recorded crop)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ api/caveats.py        |  5 +++++
+ api/routers/cities.py | 12 +++++++++---
+ tests/api/test_api.py | 19 ++++++++++++++-----
+ 3 files changed, 28 insertions(+), 8 deletions(-)
+
+diff --git a/api/caveats.py b/api/caveats.py
+index 6a7e6ac..55c4465 100644
+--- a/api/caveats.py
++++ b/api/caveats.py
+@@ -14,3 +14,8 @@ NO_RECOMMENDATIONS = (
+     "No crop has been recorded within 100 km of this city, so there is no local record to compare "
+     "against and no recommendation is shown."
+ )
++
++NO_SOIL_DATA = (
++    "This city has no soil pH measurement in the soil database (WoSIS), so crops cannot be checked "
++    "against its soil and no recommendation is shown."
++)
+diff --git a/api/routers/cities.py b/api/routers/cities.py
+index 3478c1a..42dfab6 100644
+--- a/api/routers/cities.py
++++ b/api/routers/cities.py
+@@ -5,7 +5,7 @@ from typing import List, Optional
+ from fastapi import APIRouter, Depends, HTTPException, Query
+ from sqlalchemy.engine import Connection
+ 
+-from api.caveats import CAVEATS, NO_RECOMMENDATIONS
++from api.caveats import CAVEATS, NO_RECOMMENDATIONS, NO_SOIL_DATA
+ from api.db import first, get_connection, rows
+ from api.routers.deps import Tables, known_city, tables
+ from api.schemas import (CityContext, CityDetail, CityPlantDetail, CityPlants, CitySummary,
+@@ -28,6 +28,12 @@ def _reasons_by_species(conn: Connection, t: Tables, city: str) -> dict:
+     return grouped
+ 
+ 
++def _why_no_scores(conn: Connection, t: Tables, city: str) -> str:
++    """The true reason a city has no scores: no soil pH, or no crop recorded nearby."""
++    found = first(conn, f"SELECT soil_ph, frost_zone FROM {t.annual} WHERE city = :city", city=city)
++    return NO_SOIL_DATA if found["soil_ph"] is None or found["frost_zone"] is None else NO_RECOMMENDATIONS
++
++
+ def _city_plants(conn: Connection, t: Tables, city: str, limit: int,
+                  functional_group: Optional[str] = None, min_score: float = 0.0) -> List[dict]:
+     where, params = ["s.city = :city", "s.suitability_score >= :min_score"], {"city": city, "min_score": min_score}
+@@ -100,7 +106,7 @@ def city_plants(
+     plants = _city_plants(conn, t, city, limit, functional_group, min_score)
+     available = bool(first(conn, f"SELECT 1 AS found FROM {t.scores} WHERE city = :city", city=city))
+     return {"city": city, "recommendations_available": available,
+-            "message": None if available else NO_RECOMMENDATIONS, "plants": plants}
++            "message": None if available else _why_no_scores(conn, t, city), "plants": plants}
+ 
+ 
+ @router.get("/{city}/plants/{species}", response_model=CityPlantDetail,
+@@ -150,6 +156,6 @@ def city_context(city: str = Depends(known_city), conn: Connection = Depends(get
+         SELECT pair_rank, species_a, species_b, mechanism, benefit_category, evidence_level,
+                relationship_score, notes
+         FROM {t.companions} WHERE city = :city ORDER BY pair_rank LIMIT 5""", city=city)
+-    caveats = list(CAVEATS) if top else [NO_RECOMMENDATIONS]
++    caveats = list(CAVEATS) if top else [_why_no_scores(conn, t, city)]
+     return {"city": detail, "recommendations_available": bool(top), "top_plants": top,
+             "companions": companions, "caveats": caveats}
+diff --git a/tests/api/test_api.py b/tests/api/test_api.py
+index 5c5d976..c908ea6 100644
+--- a/tests/api/test_api.py
++++ b/tests/api/test_api.py
+@@ -50,7 +50,8 @@ def client(tmp_path, monkeypatch):
+             soil_ph, last_updated_at) VALUES
+             ('Lagos','NG',6.5,3.4,'frost_free',5.9,'2026-10-01 06:00:00'),
+             ('Nairobi','KE',-1.3,36.8,'frost_free',6.2,'2026-10-01 06:00:00'),
+-            ('Harare','ZW',-17.8,31.0,'light_frost',NULL,NULL)"""))
++            ('Harare','ZW',-17.8,31.0,'frost_free',5.8,NULL),
++            ('Hanoi','VN',21.0,105.8,'frost_free',NULL,NULL)"""))
+         c.execute(text("""INSERT INTO mart_planting_features (city, month, month_name, avg_temp_c, is_frost_free_month,
+             is_good_planting_month) VALUES ('Lagos',2,'Feb',28.1,1,1),('Lagos',1,'Jan',27.0,1,0)"""))
+         c.execute(text("""INSERT INTO mart_plant_profiles (species, common_name, family, functional_group,
+@@ -87,16 +88,17 @@ def test_health(client):
+ 
+ def test_all_cities_flags_the_city_without_scores(client):
+     cities = {c["city"]: c for c in client.get("/cities").json()}
+-    assert set(cities) == {"Harare", "Lagos", "Nairobi"}
++    assert set(cities) == {"Hanoi", "Harare", "Lagos", "Nairobi"}
+     assert cities["Lagos"]["has_recommendations"] is True
+     assert cities["Harare"]["has_recommendations"] is False
+-    assert cities["Harare"]["soil_ph"] is None          # missing stays empty
++    assert cities["Hanoi"]["soil_ph"] is None           # missing stays empty
+ 
+ 
+ def test_city_filters(client):
+     assert [c["city"] for c in client.get("/cities?search=la").json()] == ["Lagos"]
+     assert [c["city"] for c in client.get("/cities?country=ke").json()] == ["Nairobi"]
+-    assert [c["city"] for c in client.get("/cities?has_recommendations=false").json()] == ["Harare"]
++    unscored = client.get("/cities?has_recommendations=false").json()
++    assert [c["city"] for c in unscored] == ["Hanoi", "Harare"]
+ 
+ 
+ def test_city_lookup_ignores_capitals_and_unknown_city_is_404(client):
+@@ -127,7 +129,14 @@ def test_city_without_scores_says_so_instead_of_inventing_any(client):
+     body = client.get("/cities/Harare/plants").json()
+     assert body["recommendations_available"] is False
+     assert body["plants"] == []
+-    assert "no recommendation" in body["message"]
++    assert "No crop has been recorded" in body["message"]
++
++
++def test_city_without_soil_ph_gets_its_own_reason(client):
++    body = client.get("/cities/Hanoi/plants").json()
++    assert body["recommendations_available"] is False
++    assert "no soil pH measurement" in body["message"]
++    assert "no soil pH measurement" in client.get("/cities/Hanoi/context").json()["caveats"][0]
+ 
+ 
+ def test_one_plant_in_one_city_has_fit_checks_and_crop_needs(client):
+-- 
+2.43.0
+

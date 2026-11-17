@@ -1,0 +1,194 @@
+From e628909241d361dea8f020459d4ead20e52b50fa Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 7 Oct 2026 23:21:34 +0300
+Subject: [PATCH] Search soil in surrounding tiles instead of one large box
+
+WoSIS returns at most 20 profiles per query, so a large box in a data-rich area returns an
+arbitrary 20 that can all lack pH (seen for Berlin: pH exists in neighbouring tiles).
+After the 0.5 degree near box, search the eight surrounding 1-degree tiles, deduplicate
+profiles, and take each property from the nearest search that has it.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012HbcbvEafNFn6aR2BmUheY
+---
+ scripts/fetch_soil.py         | 47 +++++++++++++++++++++-------
+ tests/unit/test_fetch_soil.py | 59 ++++++++++++++++++++++++++++++-----
+ 2 files changed, 86 insertions(+), 20 deletions(-)
+
+diff --git a/scripts/fetch_soil.py b/scripts/fetch_soil.py
+index 5c23fba..283b03c 100644
+--- a/scripts/fetch_soil.py
++++ b/scripts/fetch_soil.py
+@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
+ ## WoSIS API details
+ WOSIS_URL = "https://graphql.isric.org/wosis/graphql"
+ 
+-# Look for nearby profiles within ~55km (0.5deg) first, then widen to ~220km (2.0deg)
+-# Without it, many cities with no nearby profiles would return no soil data, even though usable profiles exist slightly farther away.
+-BOX_SIZES_DEG = [0.5, 2.0]
++# Look for nearby profiles within ~55km (0.5deg) first. If any property is still missing,
++# widen to a ring of eight neighbouring 1-degree tiles around the city (reaching ~165km).
++# Tiles are used instead of one large box because WoSIS returns at most 20 profiles per query:
++# in a data-rich area one large box returns an arbitrary 20 and can miss the profiles that have a pH reading.
++NEAR_BOX_DEG = 0.5
++TILE_HALF_WIDTH_DEG = 0.5
++TILE_OFFSETS_DEG = (-1.0, 0.0, 1.0)
++WIDE_REACH_DEG = max(TILE_OFFSETS_DEG) + TILE_HALF_WIDTH_DEG
+ 
+ # WoSIS API limits the number of profiles returned per query to 20, and the number of layers per profile to 3.
+ MAX_PROFILES_PER_QUERY = 20  
+@@ -168,23 +173,41 @@ def missing_properties(profiles, lat, lon):
+     ]
+ 
+ 
++def fetch_wide_area(lat, lon):
++    """
++    Profiles from the 3 x 3 grid of 1-degree tiles centred on the city, without duplicates.
++    A tile that comes back full (20 profiles) may have more profiles than were returned.
++    """
++    found = {}
++    for dy in TILE_OFFSETS_DEG:
++        for dx in TILE_OFFSETS_DEG:
++            tile = query_wosis_box(lat + dy, lon + dx, TILE_HALF_WIDTH_DEG)
++            if len(tile) >= MAX_PROFILES_PER_QUERY:
++                logger.info(f"  Tile ({dy:+.0f}, {dx:+.0f}) is full - more profiles may exist than were returned")
++            for p in tile:
++                found[p["profileId"]] = p
++    return list(found.values())
++
++
+ # Fetch soil data for a specific city
+ def fetch_soil_for_city(city_name, lat, lon):
+     """
+-    Returns a list of (box_degrees, profiles), from the smallest search box to the widest used.
++    Returns a list of (reach_degrees, profiles), nearest search first.
+ 
+-    The search widens when the small box has no profiles OR when some property (for example pH)
++    The wider search runs when the near box has no profiles OR when some property (for example pH)
+     has no measurement in it. Widening only for "no profiles" left pH empty for cities where
+     nearby profiles existed but none had a pH reading.
+     """
+     levels = []
+-    for box_deg in BOX_SIZES_DEG:
+-        profiles = query_wosis_box(lat, lon, box_deg)
+-        if profiles:
+-            levels.append((box_deg, profiles))
+-            if not missing_properties(profiles, lat, lon):
+-                break
+-        logger.info(f"  Not enough data within {box_deg}deg - widening")
++    near = query_wosis_box(lat, lon, NEAR_BOX_DEG)
++    if near:
++        levels.append((NEAR_BOX_DEG, near))
++        if not missing_properties(near, lat, lon):
++            return levels
++    logger.info(f"  Not enough data within {NEAR_BOX_DEG}deg - searching the surrounding tiles")
++    wide = fetch_wide_area(lat, lon)
++    if wide:
++        levels.append((WIDE_REACH_DEG, wide))
+     return levels
+ 
+ 
+diff --git a/tests/unit/test_fetch_soil.py b/tests/unit/test_fetch_soil.py
+index 511ec0d..fa12dbc 100644
+--- a/tests/unit/test_fetch_soil.py
++++ b/tests/unit/test_fetch_soil.py
+@@ -17,12 +17,15 @@ import fetch_soil  # noqa: E402
+ LAT, LON = 52.52, 13.40
+ 
+ 
++_next_id = iter(range(1, 10_000))
++
++
+ def profile(lat, lon, ph=None, clay=30.0):
+     """A WoSIS profile with one layer. Properties given as None have no measurement."""
+     def val(v):
+         return [] if v is None else [{"value": [str(v)], "valueAvg": v}]
+     return {
+-        "profileId": 1, "latitude": lat, "longitude": lon,
++        "profileId": next(_next_id), "latitude": lat, "longitude": lon,
+         "layers": [{
+             "upperDepth": 0, "lowerDepth": 5,
+             "phaqValues": val(ph), "clayValues": val(clay), "sandValues": val(40.0),
+@@ -32,9 +35,16 @@ def profile(lat, lon, ph=None, clay=30.0):
+ 
+ 
+ def fake_query(small, large):
+-    """Returns a stand-in for query_wosis_box giving `small` for 0.5 deg and `large` for 2.0 deg."""
+-    def query(lat, lon, box_deg):
+-        return small if box_deg == 0.5 else large
++    """
++    Stand-in for query_wosis_box: `small` for the near box centred on the city,
++    `large` for the one tile east of the city, nothing for the other tiles.
++    """
++    def query(lat, lon, half_width):
++        if lat == LAT and lon == LON and half_width == fetch_soil.NEAR_BOX_DEG:
++            return small
++        if abs(lat - LAT) < 1e-9 and abs(lon - (LON + 1.0)) < 1e-9:
++            return large
++        return []
+     return query
+ 
+ 
+@@ -46,9 +56,9 @@ def test_widens_when_small_box_has_profiles_but_no_ph(monkeypatch):
+     levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
+     row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
+ 
+-    assert [box for box, _ in levels] == [0.5, 2.0]
++    assert [box for box, _ in levels] == [0.5, fetch_soil.WIDE_REACH_DEG]
+     assert row["phh2o_0_5cm"] == 64          # pH 6.4 stored x10, from the wider box
+-    assert row["wosis_box_degrees_used"] == 2.0
++    assert row["wosis_box_degrees_used"] == fetch_soil.WIDE_REACH_DEG
+     assert row["wosis_ph_n_profiles"] == 1
+ 
+ 
+@@ -56,8 +66,8 @@ def test_does_not_widen_when_everything_is_present(monkeypatch):
+     near = [profile(52.5, 13.4, ph=7.0)]
+     calls = []
+ 
+-    def query(lat, lon, box_deg):
+-        calls.append(box_deg)
++    def query(lat, lon, half_width):
++        calls.append(half_width)
+         return near
+ 
+     monkeypatch.setattr(fetch_soil, "query_wosis_box", query)
+@@ -99,3 +109,36 @@ def test_no_profiles_at_all_gives_empty_row(monkeypatch):
+     assert levels == []
+     assert row["phh2o_0_5cm"] is None and row["clay_0_5cm"] is None
+     assert row["wosis_box_degrees_used"] is None
++
++
++def test_tiles_find_ph_that_one_big_box_would_miss(monkeypatch):
++    """The near box has profiles without pH; pH sits in two different neighbouring tiles."""
++    near = [profile(52.5, 13.4, ph=None)]
++    east = [profile(52.5, 14.4, ph=6.0)]
++    north = [profile(53.5, 13.4, ph=7.0)]
++
++    def query(lat, lon, half_width):
++        if lat == LAT and lon == LON:
++            return near
++        if abs(lat - LAT) < 1e-9 and abs(lon - (LON + 1.0)) < 1e-9:
++            return east
++        if abs(lat - (LAT + 1.0)) < 1e-9 and abs(lon - LON) < 1e-9:
++            return north
++        return []
++
++    monkeypatch.setattr(fetch_soil, "query_wosis_box", query)
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++
++    assert row["wosis_ph_n_profiles"] == 2
++    assert 60 < row["phh2o_0_5cm"] < 70      # between 6.0 and 7.0, stored x10
++
++
++def test_same_profile_in_two_tiles_is_counted_once(monkeypatch):
++    shared = profile(52.5, 13.9, ph=6.0)
++    monkeypatch.setattr(
++        fetch_soil, "query_wosis_box",
++        lambda lat, lon, half_width: [] if (lat, lon) == (LAT, LON) else [shared])
++    levels = fetch_soil.fetch_soil_for_city("Berlin", LAT, LON)
++    row = fetch_soil.build_soil_row("Berlin", "DE", LAT, LON, levels)
++    assert row["wosis_ph_n_profiles"] == 1
+-- 
+2.43.0
+
