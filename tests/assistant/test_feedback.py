@@ -107,3 +107,19 @@ def test_gateway_feedback_end_to_end(service, settings):
     missing = http.post("/assistant/feedback", json={"session_id": "nope", "turn": 0, "rating": "up"})
     # Not found.
     assert missing.status_code == 404
+
+
+def test_repeat_taps_on_the_same_reason_are_not_queued_again(service, visitor):
+    """Thumbs down, then a reason, then the same reason again: two queue lines at most, never three."""
+    # One answered question.
+    session_id, answer = _chat_with_one_answer(service, visitor)
+    # Thumbs down with no reason yet.
+    service.give_feedback(visitor, session_id, answer.turn, "down")
+    # A reason added afterwards.
+    service.give_feedback(visitor, session_id, answer.turn, "down", "unclear")
+    # The very same reason tapped again.
+    service.give_feedback(visitor, session_id, answer.turn, "down", "unclear")
+    # A different reason is new information, so it is queued.
+    service.give_feedback(visitor, session_id, answer.turn, "down", "wrong")
+    # Lines waiting for a person: the down, the first reason and the changed reason.
+    assert [q["reason"] for q in service.review_queue.read_all()] == ["", "unclear", "wrong"]
