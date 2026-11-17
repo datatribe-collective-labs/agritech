@@ -5,6 +5,8 @@ from __future__ import annotations
 
 # Read the pinned card.
 import json
+# Pattern matching for the pH question.
+import re
 
 # Base class.
 from assistant.llm.base import LLM
@@ -68,6 +70,14 @@ class RuleBasedFakeLLM(LLM):
                 # Ask for the companions tool.
                 return LLMReply(tool_calls=[ToolCall("t1", "get_companions", {"city": city, "species": species})],
                                 tokens_in=50, tokens_out=10, model=model)
+            # A months question on a crop whose card already names the months: answer from the card.
+            if "month" in question and card.get("months_suited"):
+                # No tool needed.
+                return LLMReply(text=self._months_text(card), tokens_in=80, tokens_out=40, model=model)
+            # A soil pH question: answer from the card's own values.
+            if re.search(r"\bph\b", question) and card.get("city_soil_ph") is not None:
+                # No tool needed.
+                return LLMReply(text=self._ph_text(card), tokens_in=80, tokens_out=40, model=model)
             # Calendar question.
             if ("month" in question or "calendar" in question or "when" in question) and city:
                 # Ask for the calendar tool.
@@ -85,6 +95,24 @@ class RuleBasedFakeLLM(LLM):
                             tokens_in=80, tokens_out=40, model=model)
         # Otherwise answer from the pinned card.
         return LLMReply(text=self._from_card(card), tokens_in=80, tokens_out=40, model=model)
+
+    def _months_text(self, card: dict) -> str:
+        """Name the months from the card."""
+        # The month lists on the card.
+        months = card["months_suited"]
+        # Prefer months that are both warm enough and frost free.
+        names = months.get("both") or months.get("temperature_suits") or []
+        # One grounded sentence.
+        return f"As an AI helper: months that suit {card['common_name']} in {card['city']}: {', '.join(names) or 'none'}."
+
+    def _ph_text(self, card: dict) -> str:
+        """State the city's soil pH next to the crop's ideal range, using only card values."""
+        # The crop's ideal pH range from the card.
+        traits = card.get("traits") or {}
+        # One grounded sentence.
+        return (f"As an AI helper: the soil pH in {card['city']} is {card['city_soil_ph']}. "
+                # Then the crop's ideal range.
+                f"{card['common_name']} does best between {traits.get('optimal_ph_min')} and {traits.get('optimal_ph_max')}.")
 
     def _from_card(self, card: dict) -> str:
         """Plain sentences built from the card."""

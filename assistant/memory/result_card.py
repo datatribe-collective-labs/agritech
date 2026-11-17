@@ -11,6 +11,8 @@ from __future__ import annotations
 from assistant.tools.api_client import ApiClient, ToolError
 # Make names safe inside URLs.
 from urllib.parse import quote
+# Month names that suit a crop.
+from assistant.memory.crop_months import months_suited
 # Plain-words notes about weak or unusual results.
 from assistant.memory.heads_up import build_heads_up
 
@@ -31,6 +33,10 @@ def build_card(api: ApiClient, city: str, species: str = "") -> dict:
             # How many crops are ranked in this city, so "rank 7" can be read as "7 of 10".
             "crops_ranked_in_city": _count_ranked(api, city),
         }
+        # The city's own soil pH, so "what is the original pH?" has a grounded answer.
+        card["city_soil_ph"] = _city_soil_ph(api, city)
+        # Month names for this crop (None when the app does not know the crop's temperature range).
+        card["months_suited"] = months_suited(_monthly(api, city), data.get("traits"), data.get("fit"))
         # Notes on a low rank or a crop never recorded nearby.
         card["heads_up"] = build_heads_up(card)
         # Done with the crop card.
@@ -64,6 +70,30 @@ def _count_ranked(api: ApiClient, city: str):
     # A failed lookup just means the rank is shown without a total.
     except ToolError:
         # No total.
+        return None
+
+
+def _city_soil_ph(api: ApiClient, city: str):
+    """The city's soil pH from the app (None when it is not known)."""
+    # One small read-only call.
+    try:
+        # The city profile holds the soil pH.
+        return api.get(f"/cities/{quote(city)}").get("soil_ph")
+    # A failed lookup just means no soil pH on the card.
+    except ToolError:
+        # Nothing to show.
+        return None
+
+
+def _monthly(api: ApiClient, city: str):
+    """Average climate for each month of the year (None when it cannot be fetched)."""
+    # One small read-only call.
+    try:
+        # Twelve rows, one per month.
+        return api.get(f"/cities/{quote(city)}/climate/monthly")
+    # A failed lookup just means no month names.
+    except ToolError:
+        # Nothing to show.
         return None
 
 
