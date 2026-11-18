@@ -67,6 +67,8 @@ class Settings:
     daily_questions_per_user: int = _int("ASSISTANT_DAILY_QUESTIONS", 50)
     # Hard cap on model tokens for the whole service per day (the cost safety net).
     daily_token_budget: int = _int("ASSISTANT_DAILY_TOKEN_BUDGET", 200_000)
+    # File that keeps today's token count across restarts (empty means keep it in memory only).
+    token_state_path: str = ""
     # Longest question we accept, in characters.
     max_question_chars: int = _int("ASSISTANT_MAX_QUESTION_CHARS", 500)
     # Most plan-act-observe rounds the agent may take for one question.
@@ -105,4 +107,6 @@ def load_settings() -> Settings:
         kill_file=os.environ.get("ASSISTANT_KILL_FILE", "/etc/planting/assistant.off"),
         review_queue_path=os.environ.get("ASSISTANT_REVIEW_QUEUE", "assistant_review_queue.jsonl"),
         trace_path=os.environ.get("ASSISTANT_TRACE_PATH", ""),
+        # Where today's token count is kept so a restart does not reset the budget.
+        token_state_path=os.environ.get("ASSISTANT_TOKEN_STATE", "/var/lib/planting/assistant_tokens.json"),
     )
