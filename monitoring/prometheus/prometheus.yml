@@ -39,3 +39,11 @@ scrape_configs:
         # install.sh creates this file and keeps it readable only by the prometheus user.
         files:
           - /etc/prometheus/assistant_key
+
+  # JOB 4: Caddy, the web server in front of everything. It counts every request and how long each took,
+  # for the website and the API alike. Caddy's admin address (127.0.0.1:2019) only answers from this same server.
+  # Needs "metrics" switched on in the Caddyfile: see monitoring/README.md.
+  - job_name: caddy
+    # Caddy publishes at the default /metrics path, so no metrics_path is needed.
+    static_configs:
+      - targets: ["127.0.0.1:2019"]
