@@ -17,7 +17,7 @@ the assistant, Airflow or the database. Everything can be switched off again wit
 |---|---|---|
 | **node_exporter** | Reports the machine's CPU, memory, disk and network numbers | 9100 |
 | **Prometheus** | Visits each reporter every 15 seconds and writes the numbers in a diary (15 days kept) | 9090 |
-| **Grafana** | Draws charts from the diary and shows them in your browser | 3000 |
+| **Grafana** | Draws charts from the diary and shows them in your browser | 3030 (3000 is the website) |
 
 All three listen on `127.0.0.1` only, so **nothing is open to the internet**.
 
@@ -46,11 +46,11 @@ bash /root/agritech-monitoring/monitoring/install.sh
 ## Open the dashboards (from your own computer)
 
 ```powershell
-# Keep this window open. It makes the server's Grafana appear on your own port 3001.
-ssh -L 3001:127.0.0.1:3000 root@94.237.15.238
+# Keep this window open. It makes the server's Grafana appear on your own port 3300.
+ssh -i $HOME\.ssh\KEYNAME -L 3300:127.0.0.1:3030 root@94.237.15.238
 ```
 
-Then open <http://localhost:3001>, log in as `admin` with the password you chose, and open the folder
+Then open <http://localhost:3300>, log in as `admin` with the password you chose, and open the folder
 **Planting Intelligence**.
 
 ## How to read the charts

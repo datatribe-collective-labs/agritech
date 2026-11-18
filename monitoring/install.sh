@@ -58,7 +58,8 @@ GF=/etc/default/grafana-server
 # Make sure the file exists before we search it.
 touch "$GF"
 # Add each setting only if it is not there yet (so running the script twice does not duplicate lines).
-for line in "GF_SERVER_HTTP_ADDR=127.0.0.1" "GF_USERS_ALLOW_SIGN_UP=false" "GF_ANALYTICS_REPORTING_ENABLED=false"; do
+# GF_SERVER_HTTP_PORT=3030: Grafana's default port 3000 is already used by the Planting Intelligence website here.
+for line in "GF_SERVER_HTTP_ADDR=127.0.0.1" "GF_SERVER_HTTP_PORT=3030" "GF_USERS_ALLOW_SIGN_UP=false" "GF_ANALYTICS_REPORTING_ENABLED=false"; do
   # -q means "search quietly", -x means "match the whole line", -F means "treat the text as plain text".
   grep -qxF "$line" "$GF" || echo "$line" >> "$GF"
 done
@@ -121,19 +122,22 @@ if [ -t 0 ]; then
   # read -s does not print a newline, so print one.
   echo
   # Ask Grafana's own tool to set the password for the user "admin".
-  grafana-cli admin reset-admin-password "$GRAFANA_PASSWORD"
+  # --homepath and --config tell the tool where Grafana lives; without them it fails with "Could not find config defaults".
+  # "|| echo ..." keeps the installer going if this fails, so the final checks still run.
+  grafana cli --homepath /usr/share/grafana --config /etc/grafana/grafana.ini admin reset-admin-password "$GRAFANA_PASSWORD" \
+    || echo "Could not set the password. Grafana's first login is admin / admin and it will make you change it."
   # Forget the password.
   unset GRAFANA_PASSWORD
 else
   # Not interactive (for example run from automation): leave the default and warn.
-  echo "Skipped: not a terminal. Set it later with: grafana-cli admin reset-admin-password '<new password>'"
+  echo "Skipped: not a terminal. Set it later with: grafana cli --homepath /usr/share/grafana --config /etc/grafana/grafana.ini admin reset-admin-password '<new password>'"
 fi
 
 # --------------------------------------------------------------------------------------------------------------
 step "8. Checking: every service should be listening on 127.0.0.1 only"
 # ss lists open ports; -t TCP, -l listening, -n numbers instead of names, -p which program.
 # We look for our three ports. Each line should show 127.0.0.1:PORT (not 0.0.0.0 or [::]).
-ss -tlnp | grep -E ':(9090|9100|3000)\b' || true
+ss -tlnp | grep -E ':(9090|9100|3030)\b' || true
 # A last summary of whether the services are running.
 systemctl is-active prometheus prometheus-node-exporter grafana-server
 
@@ -142,8 +146,8 @@ cat <<'MSG'
 
 Done. To open the dashboards from your own computer, run this in PowerShell (keep it open):
 
-    ssh -L 3001:127.0.0.1:3000 root@94.237.15.238
+    ssh -i <your key> -L 3300:127.0.0.1:3030 root@94.237.15.238
 
-then open http://localhost:3001 in your browser. Log in as user "admin" with the password you just chose.
+then open http://localhost:3300 in your browser. Log in as user "admin" with the password you just chose.
 Look in the folder "Planting Intelligence". More help: monitoring/README.md
 MSG
