@@ -430,3 +430,21 @@ def test_golden_evals_pass_on_sample_data(service):
     report = run_evals.run(service, cases)
     # Every threshold is met and no slice is weak.
     assert run_evals.failures(report) == [], report
+
+
+def test_common_crop_name_is_turned_into_scientific_name():
+    """A follow-up that names the crop 'Maize / Corn' must still reach the data (it needs 'Zea mays')."""
+    # The orchestrator class holds the fixing rule.
+    from assistant.agent.orchestrator import Orchestrator
+    # The pinned result for the crop page the farmer is on.
+    card = {"city": "Lagos", "species": "Zea mays", "common_name": "Maize / Corn"}
+    # The model copied the common name, with different capital letters and a trailing space.
+    fixed = Orchestrator._scientific_name({"city": "Lagos", "species": "maize / corn "}, card)
+    # The scientific name is used instead.
+    assert fixed["species"] == "Zea mays"
+    # A crop name that is not on the card is left exactly as asked.
+    assert Orchestrator._scientific_name({"species": "Oryza sativa"}, card)["species"] == "Oryza sativa"
+    # City pages: the common name is found in the ranked list.
+    city_card = {"plants": [{"species": "Manihot esculenta", "common_name": "Cassava"}]}
+    # Fixed there too.
+    assert Orchestrator._scientific_name({"species": "Cassava"}, city_card)["species"] == "Manihot esculenta"
