@@ -36,7 +36,7 @@ def colours(*steps):
     return {"mode": "absolute", "steps": [{"color": c, "value": v} for v, c in steps]}
 
 
-def panel(pid, kind, title, queries, x, y, w, h, unit="short", note="", low=None, high=None, steps=None, extra=None):
+def panel(pid, kind, title, queries, x, y, w, h, unit="short", note="", low=None, high=None, steps=None, extra=None, decimals=None):
     """One box on the dashboard.
 
     pid   : a unique number for this box.
@@ -50,6 +50,7 @@ def panel(pid, kind, title, queries, x, y, w, h, unit="short", note="", low=None
     low, high : fixed bottom and top of the scale (for example 0 and 100 for a percentage).
     steps : colour rules made with colours(...).
     extra : any extra Grafana options to merge in (value mappings and similar).
+    decimals : how many digits after the decimal point to show. 0 for whole numbers such as counts of questions.
     """
     # The numbers' formatting and colouring rules.
     defaults = {"unit": unit, "thresholds": steps or colours((None, "green"))}
@@ -59,6 +60,9 @@ def panel(pid, kind, title, queries, x, y, w, h, unit="short", note="", low=None
     # Same for the top of the scale.
     if high is not None:
         defaults["max"] = high
+    # Whole-number counts: show 3 instead of 3.03 (increase() stretches counts over the window, adding a tiny fraction).
+    if decimals is not None:
+        defaults["decimals"] = decimals
     # Merge any extra field options such as value mappings.
     defaults.update(extra or {})
     # Options that control how a stat or gauge picks its number: use the latest value.
@@ -143,15 +147,15 @@ server_panels = [
 assistant_panels = [
     # Top row: the day at a glance.
     panel(1, "stat", "Questions (24 h)", [query("sum(increase(planting_assistant_questions_total[24h])) or vector(0)", "questions")],
-          0, 0, 4, 4, unit="short", note="Questions farmers asked in the last 24 hours."),
+          0, 0, 4, 4, unit="short", decimals=0, note="Questions farmers asked in the last 24 hours."),
     panel(2, "stat", "Sent to human review (24 h)",
-          [query("sum(increase(planting_assistant_sent_to_review_total[24h])) or vector(0)", "review")], 4, 0, 4, 4,
+          [query("sum(increase(planting_assistant_sent_to_review_total[24h])) or vector(0)", "review")], 4, 0, 4, 4, decimals=0,
           steps=colours((None, "green"), (1, "yellow"), (10, "red")),
           note="Answers that failed our checks or got a thumbs down. They wait in the review queue for a person."),
     panel(3, "stat", "Thumbs up (24 h)", [query("sum(increase(planting_assistant_feedback_up_total[24h])) or vector(0)", "up")],
-          8, 0, 4, 4, note="Farmers who rated an answer helpful."),
+          8, 0, 4, 4, decimals=0, note="Farmers who rated an answer helpful."),
     panel(4, "stat", "Thumbs down (24 h)", [query("sum(increase(planting_assistant_feedback_down_total[24h])) or vector(0)", "down")],
-          12, 0, 4, 4, steps=colours((None, "green"), (1, "yellow"), (5, "red")),
+          12, 0, 4, 4, decimals=0, steps=colours((None, "green"), (1, "yellow"), (5, "red")),
           note="Farmers who rated an answer not helpful. Each one is queued for review with its reason."),
     # The daily token budget: tokens_today comes straight from the assistant's kill switch.
     panel(5, "gauge", "Tokens used today (budget 200,000)", [query("planting_assistant_tokens_today", "tokens")],
