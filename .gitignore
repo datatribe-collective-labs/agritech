@@ -230,3 +230,4 @@ ml/saved_models/suitability_runs/
 
 # Patch files made for sharing, never committed
 *.patch
+loadtest/*.csv
