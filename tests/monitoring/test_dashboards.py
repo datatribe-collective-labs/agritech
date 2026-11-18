@@ -89,7 +89,7 @@ def test_prometheus_config_has_the_three_jobs_and_no_secret():
     # Parse it.
     config = yaml.safe_load(raw)
     # The jobs we expect.
-    assert [j["job_name"] for j in config["scrape_configs"]] == ["prometheus", "server", "assistant"]
+    assert [j["job_name"] for j in config["scrape_configs"]] == ["prometheus", "server", "assistant", "caddy"]
     # The key must come from a file, never be written in the config (which is committed to git).
     assistant = config["scrape_configs"][2]
     # Only a 'files' entry is allowed for the header.

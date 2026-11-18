@@ -1,4 +1,4 @@
-"""Builds the two Grafana dashboards (server and assistant) as JSON files.
+"""Builds the three Grafana dashboards (server, assistant and traffic) as JSON files.
 
 WHY A SCRIPT? A Grafana dashboard is a big JSON file that is hard to read. Here each chart is one short, commented
 call, and the script writes the JSON for us. To change a chart: edit this file, run it, commit both files.
@@ -182,15 +182,72 @@ assistant_panels = [
 ]
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# DASHBOARD 3: TRAFFIC. Numbers come from Caddy (job "caddy"), the web server every visitor passes through first.
+# Because Caddy sees EVERY request (the website and the API, answered fresh or from the API's cache), these charts
+# show what visitors really experience. Caddy publishes one number per request, kept in a "histogram":
+#   caddy_http_request_duration_seconds_count  = how many requests there have been (we use it to count requests)
+#   caddy_http_request_duration_seconds_bucket = how many finished within 5 ms, 10 ms, 25 ms... (we use it for speed)
+# Each request also carries a "code" label (the reply: 200 = fine, 404 = not found, 503 = too busy) and, with
+# per_host switched on in the Caddyfile, a "host" label (which site: the API or the website).
+# histogram_quantile(0.95, ...) answers: "95 out of 100 requests were faster than this".
+# ---------------------------------------------------------------------------------------------------------------
+
+# The metric every traffic chart is built from (one name, so a typo is easy to spot).
+REQ = "caddy_http_request_duration_seconds"
+
+traffic_panels = [
+    # Top row: the hour at a glance.
+    panel(1, "stat", "Requests (1 h)", [query(f"sum(increase({REQ}_count[1h])) or vector(0)", "requests")],
+          0, 0, 6, 4, decimals=0, note="Every request that reached the server in the last hour: the website, the API and the assistant."),
+    # 5xx means OUR side failed (a 4xx would be the visitor asking for something wrong).
+    panel(2, "stat", "Server errors (1 h)", [query(f'sum(increase({REQ}_count{{code=~"5.."}}[1h])) or vector(0)', "errors")],
+          6, 0, 6, 4, decimals=0, steps=colours((None, "green"), (1, "yellow"), (20, "red")),
+          note="Replies starting with 5 (500, 502, 503...). These mean the server failed, not the visitor. Should stay at 0."),
+    # 503 is the polite 'busy, retry in 5 seconds' reply our API gives when the database connections run out.
+    panel(3, "stat", "Busy replies (503, 1 h)", [query(f'sum(increase({REQ}_count{{code="503"}}[1h])) or vector(0)', "busy")],
+          12, 0, 6, 4, decimals=0, steps=colours((None, "green"), (1, "yellow"), (50, "red")),
+          note="The API said 'busy, try again in a few seconds' (no free database connection). A few during a spike is "
+               "the safety net working; many means we need more capacity."),
+    # The slowest 5% of requests: far more honest than the average.
+    panel(4, "stat", "Slowest 5% take longer than",
+          [query(f"histogram_quantile(0.95, sum by (le) (rate({REQ}_bucket[5m])))", "p95")],
+          18, 0, 6, 4, unit="s", steps=colours((None, "green"), (0.5, "yellow"), (2, "red")),
+          note="95 out of 100 requests were faster than this over the last 5 minutes. Under half a second is good."),
+    # Middle row: how busy, and what kind of replies.
+    panel(5, "timeseries", "Requests per second, by site",
+          [query(f"sum by (host) (rate({REQ}_count[2m]))", "{{host}}")], 0, 4, 12, 8, low=0,
+          note="One line per site (the API and the website). If you see a single line called 'No data' or no host name, "
+               "switch on per_host in the Caddyfile (see monitoring/README.md)."),
+    panel(6, "timeseries", "Replies by status code",
+          [query(f"sum by (code) (rate({REQ}_count[2m]))", "{{code}}")], 12, 4, 12, 8, low=0,
+          note="200 = fine, 304 = unchanged, 404 = not found, 429 = too many requests, 503 = busy. Watch for any 5xx line."),
+    # Bottom row: speed and errors over time.
+    panel(7, "timeseries", "Response time (typical, slow, slowest)",
+          [query(f"histogram_quantile(0.50, sum by (le) (rate({REQ}_bucket[5m])))", "typical (50%)", "A"),
+           query(f"histogram_quantile(0.95, sum by (le) (rate({REQ}_bucket[5m])))", "slow (95%)", "B"),
+           query(f"histogram_quantile(0.99, sum by (le) (rate({REQ}_bucket[5m])))", "slowest (99%)", "C")],
+          0, 12, 12, 8, unit="s", low=0,
+          note="How long visitors wait. During our 500-user test the slow line was about half a second; "
+               "a line climbing for minutes means the server is struggling."),
+    panel(8, "timeseries", "Share of requests that failed",
+          [query(f'(100 * sum(rate({REQ}_count{{code=~"5.."}}[5m])) / sum(rate({REQ}_count[5m]))) or vector(0)', "failed %")],
+          12, 12, 12, 8, unit="percent", low=0, high=100,
+          note="Failed (5xx) requests as a percentage of all requests. Anything above 1% for long deserves a look."),
+]
+
+
 def main():
-    """Write both dashboards to the dashboards folder."""
+    """Write all three dashboards to the dashboards folder."""
     # Make sure the folder exists.
     OUT.mkdir(parents=True, exist_ok=True)
-    # The two dashboards to write: file name, dashboard object.
+    # The three dashboards to write: file name, dashboard object.
     for name, board in (("server.json", dashboard("planting-server", "Planting Intelligence: Server", server_panels,
                                                    ["planting", "server"])),
                         ("assistant.json", dashboard("planting-assistant", "Planting Intelligence: Assistant",
-                                                     assistant_panels, ["planting", "assistant"]))):
+                                                     assistant_panels, ["planting", "assistant"])),
+                        ("traffic.json", dashboard("planting-traffic", "Planting Intelligence: Traffic", traffic_panels,
+                                                   ["planting", "traffic"]))):
         # indent=2 makes the JSON readable; sort_keys makes reruns produce identical files (clean git diffs).
         (OUT / name).write_text(json.dumps(board, indent=2, sort_keys=True) + "\n")
         # Say what was written.

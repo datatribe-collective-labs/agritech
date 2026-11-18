@@ -1,5 +1,16 @@
 # /etc/caddy/Caddyfile  (replace the IP with the server's; dots become dashes)
 
+# Global options: this block must be the very first thing in the file.
+{
+    # Publish request counts and response times at http://127.0.0.1:2019/metrics (Prometheus reads them).
+    # per_host adds a "host" label so charts can tell the API from the website.
+    # On older Caddy versions this line must instead be:  servers {  metrics {  per_host  }  }
+    # Check with: caddy version   and   caddy validate --config /etc/caddy/Caddyfile
+    metrics {
+        per_host
+    }
+}
+
 # The API
 94-237-15-238.sslip.io {
     reverse_proxy 127.0.0.1:8000
