@@ -1,0 +1,16 @@
+# systemd timer: starts planting-alerts.service every minute.
+[Unit]
+# A readable name shown in logs.
+Description=Run the Planting Intelligence alert check every minute
+
+[Timer]
+# Start one minute after boot.
+OnBootSec=1min
+# Then one minute after the previous run finished.
+OnUnitInactiveSec=1min
+# Run that service.
+Unit=planting-alerts.service
+
+[Install]
+# Start with the system's normal timers.
+WantedBy=timers.target
