@@ -32,10 +32,14 @@ class Metrics:
             return self._counts.get(name, 0)
 
     def render_prometheus(self) -> str:
-        """All counters as 'planting_assistant_<name> <value>' lines."""
+        """All counters as 'planting_assistant_<name>_total <value>' lines.
+
+        The '_total' ending is the standard Prometheus name for a counter. Without it, Prometheus (and Grafana)
+        warn "metric might not be a counter" whenever a chart uses rate() or increase() on it.
+        """
         # Read safely and sort for stable output.
         with self._lock:
             # Stable order.
             items = sorted(self._counts.items())
         # One line per counter.
-        return "".join(f"planting_assistant_{name} {value}\n" for name, value in items)
+        return "".join(f"planting_assistant_{name}_total {value}\n" for name, value in items)

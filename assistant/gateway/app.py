@@ -165,10 +165,9 @@ def create_app(settings: Settings = None, service: AssistantService = None) -> F
         if not can(who(request, x_assistant_key), "read_metrics"):
             # Refuse non-admins.
             raise HTTPException(403, "Admins only.")
-        # Add live cache and budget numbers to the counters.
-        extra = (f"planting_assistant_cache_hits_total {service.cache.hits}\n"
-                 # Tokens used today.
-                 f"planting_assistant_tokens_today {service.kill_switch.tokens_used_today()}\n")
+        # Add the live token budget number (a gauge, so it has no _total ending). Cache hits are already counted
+        # in the counters above as planting_assistant_cache_hits_total, so they are not repeated here.
+        extra = f"planting_assistant_tokens_today {service.kill_switch.tokens_used_today()}\n"
         # Counters plus live numbers.
         return service.metrics.render_prometheus() + extra
 

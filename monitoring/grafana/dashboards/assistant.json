@@ -44,7 +44,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_questions[24h]) or vector(0)",
+          "expr": "sum(increase(planting_assistant_questions_total[24h])) or vector(0)",
           "legendFormat": "questions",
           "refId": "A"
         }
@@ -103,7 +103,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_sent_to_review[24h]) or vector(0)",
+          "expr": "sum(increase(planting_assistant_sent_to_review_total[24h])) or vector(0)",
           "legendFormat": "review",
           "refId": "A"
         }
@@ -154,7 +154,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_feedback_up[24h]) or vector(0)",
+          "expr": "sum(increase(planting_assistant_feedback_up_total[24h])) or vector(0)",
           "legendFormat": "up",
           "refId": "A"
         }
@@ -213,7 +213,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_feedback_down[24h]) or vector(0)",
+          "expr": "sum(increase(planting_assistant_feedback_down_total[24h])) or vector(0)",
           "legendFormat": "down",
           "refId": "A"
         }
@@ -318,7 +318,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(planting_assistant_questions[5m]) * 60",
+          "expr": "rate(planting_assistant_questions_total[5m]) * 60",
           "legendFormat": "questions/min",
           "refId": "A"
         }
@@ -362,7 +362,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(planting_assistant_cache_hits[5m]) * 60",
+          "expr": "rate(planting_assistant_cache_hits_total[5m]) * 60",
           "legendFormat": "answered from cache",
           "refId": "A"
         },
@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(rate(planting_assistant_questions[5m]) - rate(planting_assistant_cache_hits[5m])) * 60",
+          "expr": "(rate(planting_assistant_questions_total[5m]) - rate(planting_assistant_cache_hits_total[5m])) * 60",
           "legendFormat": "needed the model",
           "refId": "B"
         }
@@ -415,7 +415,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_blocked_input[1h])",
+          "expr": "increase(planting_assistant_blocked_input_total[1h])",
           "legendFormat": "blocked by input rules",
           "refId": "A"
         },
@@ -424,7 +424,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_blocked_kill_switch[1h])",
+          "expr": "increase(planting_assistant_blocked_kill_switch_total[1h])",
           "legendFormat": "blocked: daily budget used up",
           "refId": "B"
         },
@@ -433,7 +433,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_rate_limited[1h])",
+          "expr": "increase(planting_assistant_rate_limited_total[1h])",
           "legendFormat": "too many questions (rate limit)",
           "refId": "C"
         },
@@ -442,7 +442,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_sent_to_review[1h])",
+          "expr": "increase(planting_assistant_sent_to_review_total[1h])",
           "legendFormat": "sent to review",
           "refId": "D"
         }
@@ -486,7 +486,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(planting_assistant_tokens[1h])",
+          "expr": "increase(planting_assistant_tokens_total[1h])",
           "legendFormat": "tokens/hour",
           "refId": "A"
         }

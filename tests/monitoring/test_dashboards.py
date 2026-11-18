@@ -46,15 +46,15 @@ def test_committed_dashboards_match_the_builder(tmp_path):
 def test_every_assistant_metric_in_the_dashboard_really_exists():
     # All metric names the dashboard asks Prometheus about.
     text = (BOARDS / "assistant.json").read_text()
-    # Names look like planting_assistant_questions.
+    # Names look like planting_assistant_questions_total.
     used = set(re.findall(r"planting_assistant_[a-z_]+", text))
     # The two files that create counters: the service (questions, tokens...) and the gateway (rate limits).
     sources = [(MON.parent / "assistant" / "service.py").read_text(),
                (MON.parent / "assistant" / "gateway" / "app.py").read_text()]
-    # Counters written as metrics.inc("name") become planting_assistant_<name>.
-    known = {f"planting_assistant_{n}" for text_ in sources for n in re.findall(r'metrics\.inc\("([a-z_]+)"', text_)}
+    # Counters written as metrics.inc("name") are published as planting_assistant_<name>_total.
+    known = {f"planting_assistant_{n}_total" for text_ in sources for n in re.findall(r'metrics\.inc\("([a-z_]+)"', text_)}
     # The feedback counters are named after the rating, so they are built in code as feedback_up and feedback_down.
-    known |= {"planting_assistant_feedback_up", "planting_assistant_feedback_down"}
+    known |= {"planting_assistant_feedback_up_total", "planting_assistant_feedback_down_total"}
     # Two live numbers the gateway writes out in full next to the counters.
     known |= set(re.findall(r"planting_assistant_[a-z_]+", sources[1]))
     # Anything a chart asks for that the assistant never publishes would show 'No data' forever.

@@ -134,21 +134,23 @@ server_panels = [
 # ---------------------------------------------------------------------------------------------------------------
 # DASHBOARD 2: THE AI ASSISTANT. Numbers come from /assistant/metrics (job "assistant").
 # "or vector(0)" shows 0 instead of "No data" when nothing has happened yet (a counter appears at its first use).
+# sum(...) is wrapped around the counter first: it drops the labels (job, instance), so the real number and the
+# fallback 0 have the same (empty) label set and Prometheus picks ONE of them instead of showing both.
 # increase(x[24h]) means "how much did counter x grow in the last 24 hours" and copes with restarts resetting it.
 # rate(x[5m]) * 60 means "how many per minute, averaged over the last 5 minutes".
 # ---------------------------------------------------------------------------------------------------------------
 
 assistant_panels = [
     # Top row: the day at a glance.
-    panel(1, "stat", "Questions (24 h)", [query("increase(planting_assistant_questions[24h]) or vector(0)", "questions")],
+    panel(1, "stat", "Questions (24 h)", [query("sum(increase(planting_assistant_questions_total[24h])) or vector(0)", "questions")],
           0, 0, 4, 4, unit="short", note="Questions farmers asked in the last 24 hours."),
     panel(2, "stat", "Sent to human review (24 h)",
-          [query("increase(planting_assistant_sent_to_review[24h]) or vector(0)", "review")], 4, 0, 4, 4,
+          [query("sum(increase(planting_assistant_sent_to_review_total[24h])) or vector(0)", "review")], 4, 0, 4, 4,
           steps=colours((None, "green"), (1, "yellow"), (10, "red")),
           note="Answers that failed our checks or got a thumbs down. They wait in the review queue for a person."),
-    panel(3, "stat", "Thumbs up (24 h)", [query("increase(planting_assistant_feedback_up[24h]) or vector(0)", "up")],
+    panel(3, "stat", "Thumbs up (24 h)", [query("sum(increase(planting_assistant_feedback_up_total[24h])) or vector(0)", "up")],
           8, 0, 4, 4, note="Farmers who rated an answer helpful."),
-    panel(4, "stat", "Thumbs down (24 h)", [query("increase(planting_assistant_feedback_down[24h]) or vector(0)", "down")],
+    panel(4, "stat", "Thumbs down (24 h)", [query("sum(increase(planting_assistant_feedback_down_total[24h])) or vector(0)", "down")],
           12, 0, 4, 4, steps=colours((None, "green"), (1, "yellow"), (5, "red")),
           note="Farmers who rated an answer not helpful. Each one is queued for review with its reason."),
     # The daily token budget: tokens_today comes straight from the assistant's kill switch.
@@ -157,21 +159,21 @@ assistant_panels = [
           note="Model usage so far today against the daily cap. At the cap the assistant stops answering until tomorrow. "
                "The 200,000 comes from the assistant's settings; change it here too if you change the setting."),
     # Middle row: usage over time.
-    panel(6, "timeseries", "Questions per minute", [query("rate(planting_assistant_questions[5m]) * 60", "questions/min")],
+    panel(6, "timeseries", "Questions per minute", [query("rate(planting_assistant_questions_total[5m]) * 60", "questions/min")],
           0, 4, 12, 8, low=0, note="How busy the assistant is through the day."),
     panel(7, "timeseries", "Cached or fresh answers",
-          [query("rate(planting_assistant_cache_hits[5m]) * 60", "answered from cache", "A"),
-           query("(rate(planting_assistant_questions[5m]) - rate(planting_assistant_cache_hits[5m])) * 60",
+          [query("rate(planting_assistant_cache_hits_total[5m]) * 60", "answered from cache", "A"),
+           query("(rate(planting_assistant_questions_total[5m]) - rate(planting_assistant_cache_hits_total[5m])) * 60",
                  "needed the model", "B")], 12, 4, 12, 8, low=0,
           note="Repeated questions are answered from memory for free. A high 'cache' line means lower cost."),
     # Bottom row: things that went wrong or got stopped, and what it costs.
     panel(8, "timeseries", "Questions stopped or sent for review (per hour)",
-          [query("increase(planting_assistant_blocked_input[1h])", "blocked by input rules", "A"),
-           query("increase(planting_assistant_blocked_kill_switch[1h])", "blocked: daily budget used up", "B"),
-           query("increase(planting_assistant_rate_limited[1h])", "too many questions (rate limit)", "C"),
-           query("increase(planting_assistant_sent_to_review[1h])", "sent to review", "D")], 0, 12, 12, 8, low=0,
+          [query("increase(planting_assistant_blocked_input_total[1h])", "blocked by input rules", "A"),
+           query("increase(planting_assistant_blocked_kill_switch_total[1h])", "blocked: daily budget used up", "B"),
+           query("increase(planting_assistant_rate_limited_total[1h])", "too many questions (rate limit)", "C"),
+           query("increase(planting_assistant_sent_to_review_total[1h])", "sent to review", "D")], 0, 12, 12, 8, low=0,
           note="Anything other than 'sent to review' rising fast can mean someone is probing the assistant."),
-    panel(9, "timeseries", "Model tokens per hour", [query("increase(planting_assistant_tokens[1h])", "tokens/hour")],
+    panel(9, "timeseries", "Model tokens per hour", [query("increase(planting_assistant_tokens_total[1h])", "tokens/hour")],
           12, 12, 12, 8, low=0, note="Tokens are what the model provider bills for. Watch this line to predict cost."),
 ]
 
