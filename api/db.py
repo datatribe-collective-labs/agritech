@@ -10,7 +10,9 @@ from api import config
 
 
 def make_engine() -> Engine:
-    return create_engine(config.database_url(), pool_pre_ping=True, pool_size=5, max_overflow=5)
+    """The connection pool. A request that cannot get a connection within a few seconds gives up fast (503)."""
+    return create_engine(config.database_url(), pool_pre_ping=True, pool_size=config.pool_size(),
+                         max_overflow=config.pool_overflow(), pool_timeout=config.pool_timeout())
 
 
 def get_connection(request: Request) -> Iterator[Connection]:
