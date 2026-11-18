@@ -41,3 +41,12 @@ def test_published_metric_names_are_unique(settings, service):
     assert len(names) == len(set(names)), f"duplicate metric names: {sorted({n for n in names if names.count(n) > 1})}"
     # And every counter (everything except the one gauge) ends in _total.
     assert all(n.endswith("_total") for n in names if n != "planting_assistant_tokens_today")
+
+
+def test_every_counter_exists_at_zero_from_the_start():
+    # A brand-new Metrics object, nothing has happened yet.
+    text = Metrics().render_prometheus()
+    # Each known counter is already published with the value 0, so the first real event is visible as 0 -> 1.
+    for name in ("questions", "tokens", "feedback_up", "feedback_down", "sent_to_review", "cache_hits"):
+        # The line must be there.
+        assert f"planting_assistant_{name}_total 0" in text

@@ -7,13 +7,19 @@ from __future__ import annotations
 import threading
 
 
+# Every counter the assistant uses. They are all created at 0 when the assistant starts.
+KNOWN = ("questions", "sessions_started", "blocked_input", "blocked_kill_switch", "cache_hits", "rate_limited",
+         "sent_to_review", "tokens", "feedback_up", "feedback_down")
+
+
 class Metrics:
     """A few named counters. Enough to chart usage, refusals, cache hits and errors."""
 
-    # Start with no counters.
+    # Start with every known counter at 0 (the next comment explains why).
     def __init__(self):
-        # Counter values by name.
-        self._counts = {}
+        # Counter values by name. Starting at 0, not empty, so Prometheus sees 0 -> 1 -> 2 and counts the FIRST
+        # event too. A counter that first appears already at 1 shows no growth, so its first event would be lost.
+        self._counts = {name: 0 for name in KNOWN}
         # Lock for thread safety.
         self._lock = threading.Lock()
 
