@@ -9,6 +9,7 @@
       "description": "Questions farmers asked in the last 24 hours.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -60,6 +61,7 @@
       "description": "Answers that failed our checks or got a thumbs down. They wait in the review queue for a person.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -119,6 +121,7 @@
       "description": "Farmers who rated an answer helpful.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -170,6 +173,7 @@
       "description": "Farmers who rated an answer not helpful. Each one is queued for review with its reason.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
