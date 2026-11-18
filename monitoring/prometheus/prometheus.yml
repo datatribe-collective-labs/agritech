@@ -1,0 +1,41 @@
+# Prometheus configuration: WHO to ask for numbers, and HOW OFTEN.
+# Prometheus works like a diary keeper: every few seconds it visits each "target" (a service that
+# publishes numbers) and writes down what it says, with the time. Grafana later draws charts from that diary.
+
+# Settings that apply to every job below unless a job overrides them.
+global:
+  # Visit every target every 15 seconds. Smaller means smoother charts but more stored data.
+  scrape_interval: 15s
+  # How often Prometheus re-checks alert rules (we have none yet, but this is the usual default).
+  evaluation_interval: 15s
+
+# The list of things to visit. Each "job" is a group of targets that belong together.
+scrape_configs:
+
+  # JOB 1: Prometheus watching itself. A good first check that the diary keeper is alive.
+  - job_name: prometheus
+    # The address list for this job. 9090 is Prometheus's own port; 127.0.0.1 means "this same server".
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # JOB 2: the machine itself (CPU, memory, disk, network). node_exporter publishes these numbers.
+  - job_name: server
+    # node_exporter listens on port 9100. By default it publishes at /metrics, so no path is needed.
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+
+  # JOB 3: the AI assistant. It publishes its own counters (questions, cache hits, tokens, thumbs).
+  - job_name: assistant
+    # The assistant publishes its numbers at this address instead of the default /metrics.
+    metrics_path: /assistant/metrics
+    # We call the assistant directly on its own port (8001) so the request never leaves the server.
+    static_configs:
+      - targets: ["127.0.0.1:8001"]
+    # The assistant only shows its numbers to admins, so we must send the admin key as a header.
+    http_headers:
+      # The name of the header the assistant looks for.
+      X-Assistant-Key:
+        # Read the key from a file, so the secret is never written inside this config (or in git).
+        # install.sh creates this file and keeps it readable only by the prometheus user.
+        files:
+          - /etc/prometheus/assistant_key
