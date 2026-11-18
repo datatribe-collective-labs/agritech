@@ -62,7 +62,7 @@ class AssistantService:
         # Data client.
         self.api = api
         # Safety and cost controls.
-        self.kill_switch = KillSwitch(settings.kill_file, settings.daily_token_budget)
+        self.kill_switch = KillSwitch(settings.kill_file, settings.daily_token_budget, settings.token_state_path)
         # Guardrails know the crop names.
         self.guardrails = GuardrailPipeline(settings.max_question_chars, known_crops)
         # Memory and cache.
