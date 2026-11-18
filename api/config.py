@@ -30,3 +30,23 @@ def allowed_origins() -> list:
 
 def model_report_path() -> Path:
     return Path(os.environ.get("MODEL_REPORT_PATH", DEFAULT_REPORT))
+
+
+def cache_seconds() -> float:
+    """How long a read-only answer is reused before asking the database again. 0 turns the cache off."""
+    return float(os.environ.get("API_CACHE_SECONDS", "60"))
+
+
+def pool_size() -> int:
+    """Database connections each API process keeps open."""
+    return int(os.environ.get("API_DB_POOL_SIZE", "8"))
+
+
+def pool_overflow() -> int:
+    """Extra connections an API process may open for a short burst."""
+    return int(os.environ.get("API_DB_POOL_OVERFLOW", "4"))
+
+
+def pool_timeout() -> float:
+    """Seconds a request waits for a free connection before the API answers 503 (was 30, which made a crowd hang)."""
+    return float(os.environ.get("API_DB_POOL_TIMEOUT", "5"))
