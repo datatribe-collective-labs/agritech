@@ -12,13 +12,14 @@ from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, TimeoutError as PoolTimeout
 
 from api import config
 from api.cache import CacheMiddleware, ResponseCache
 from api.db import make_engine
+from api import metrics
 from api.routers import cities, meta, plants
 
 
@@ -35,10 +36,24 @@ def create_app(engine: Optional[Engine] = None, schema: Optional[str] = None,
     # Reuse recent answers so a crowd of visitors does not each query the database.
     ttl = config.cache_seconds() if cache_seconds is None else cache_seconds
     # Added first, so it sits inside CORS and the CORS headers are still added to cached answers.
-    app.add_middleware(CacheMiddleware, cache=ResponseCache(ttl))
+    # /metrics is never cached: Prometheus must always see the live numbers.
+    app.add_middleware(CacheMiddleware, cache=ResponseCache(ttl), skip_paths=("/health", "/metrics"))
 
     app.add_middleware(CORSMiddleware, allow_origins=config.allowed_origins(),
                        allow_methods=["GET"], allow_headers=["*"])
+
+    # Added last, so it is the outermost layer: it times and counts every request, including cached answers.
+    app.add_middleware(metrics.MetricsMiddleware)
+
+    @app.get("/metrics", include_in_schema=False)
+    def request_numbers(request: Request):
+        # Caddy adds X-Forwarded-For to everything it passes on. So a request that has it came from the internet,
+        # and the numbers are for Prometheus on this same server only.
+        if "x-forwarded-for" in request.headers:
+            # Pretend the page does not exist.
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        # Everyone else (Prometheus, on this server) gets the numbers.
+        return Response(content=metrics.render(), media_type=metrics.CONTENT_TYPE)
 
     @app.exception_handler(DBAPIError)
     async def database_problem(request: Request, exc: DBAPIError):

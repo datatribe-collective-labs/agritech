@@ -1,12 +1,16 @@
-"""Safety checks for the Traffic dashboard (the numbers come from Caddy, the web server in front of everything)."""
+"""Safety checks for the API traffic dashboard (the numbers come from the API itself, see api/metrics.py)."""
 
+# json reads the dashboard file.
+import json
 # re finds metric names inside the chart queries.
 import re
 # Path builds file locations.
 from pathlib import Path
 
-# The repo's monitoring folder.
-MON = Path(__file__).resolve().parents[2] / "monitoring"
+# The repo root and its monitoring folder.
+ROOT = Path(__file__).resolve().parents[2]
+# The monitoring folder.
+MON = ROOT / "monitoring"
 # The folder with the finished dashboard JSON files.
 BOARDS = MON / "grafana" / "dashboards"
 
@@ -37,8 +41,6 @@ def test_committed_traffic_dashboard_matches_the_builder(tmp_path):
 
 
 def test_traffic_dashboard_layout_is_valid():
-    # Read the dashboard.
-    import json
     # Parse (fails if the JSON is broken).
     board = json.loads((BOARDS / "traffic.json").read_text())
     # Every box on the 24-column grid.
@@ -56,23 +58,27 @@ def test_traffic_dashboard_layout_is_valid():
     assert len(ids) == len(set(ids))
 
 
-def test_traffic_dashboard_only_asks_for_metrics_caddy_publishes():
-    # Every Caddy metric name the traffic dashboard asks Prometheus about.
-    used = set(re.findall(r"caddy_[a-z_]+", (BOARDS / "traffic.json").read_text()))
-    # The two names Caddy publishes for each request (a histogram has a _count and a _bucket part).
-    known = {"caddy_http_request_duration_seconds_count", "caddy_http_request_duration_seconds_bucket"}
+def test_traffic_dashboard_only_asks_for_metrics_the_api_publishes():
+    # Every API metric name the dashboard asks Prometheus about.
+    used = set(re.findall(r"planting_api_[a-z_]+", (BOARDS / "traffic.json").read_text()))
+    # The names api/metrics.py creates (a histogram also publishes _bucket, _count and _sum parts).
+    code = (ROOT / "api" / "metrics.py").read_text()
+    # The counter and histogram names written in that file.
+    base = set(re.findall(r'"(planting_api_[a-z_]+)"', code))
+    # Every name a chart may use.
+    known = set(base) | {f"{n}_{part}" for n in base for part in ("bucket", "count", "sum")}
     # A typo here would show 'No data' forever, so catch it now.
     assert used <= known, f"traffic dashboard uses unknown metrics: {sorted(used - known)}"
     # And it must really use them (an empty dashboard would also pass the line above).
-    assert used, "traffic dashboard asks for no Caddy metrics at all"
+    assert used, "traffic dashboard asks for no API metrics at all"
 
 
-def test_prometheus_reads_caddy_and_the_caddyfile_example_publishes_it():
+def test_prometheus_reads_the_api_and_the_service_gives_workers_a_shared_folder():
     # The Prometheus settings file, read as plain text.
     config = (MON / "prometheus" / "prometheus.yml").read_text()
-    # A job for Caddy must exist, pointing at Caddy's admin address.
-    assert "job_name: caddy" in config and "127.0.0.1:2019" in config
-    # Prometheus can only read Caddy's numbers if the Caddyfile turns them on.
-    example = (MON.parent / "deploy" / "Caddyfile.example").read_text()
-    # The global option must be there, with per_host so the API and the website can be told apart.
-    assert "metrics {" in example and "per_host" in example
+    # A job for the API must exist, pointing at the API's own port.
+    assert "job_name: api" in config and "127.0.0.1:8000" in config
+    # Without a shared folder the two workers would each show only their own half of the requests.
+    unit = (ROOT / "deploy" / "planting-api.service").read_text()
+    # The folder setting and the systemd line that creates it.
+    assert "PROMETHEUS_MULTIPROC_DIR=/run/planting-api" in unit and "RuntimeDirectory=planting-api" in unit

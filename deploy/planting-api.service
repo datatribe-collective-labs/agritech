@@ -7,6 +7,10 @@ After=network-online.target
 EnvironmentFile=/root/airflow_home/airflow.env
 Environment=PLANTING_MARTS_SCHEMA=planting_intelligence_marts
 Environment=API_CORS_ORIGINS=https://app.94-237-15-238.sslip.io,http://localhost:3000
+# The workers keep their request counts in this folder (systemd creates it at start and removes it at stop,
+# so the counts begin from zero on every restart). Needed for correct totals with more than one worker.
+Environment=PROMETHEUS_MULTIPROC_DIR=/run/planting-api
+RuntimeDirectory=planting-api
 WorkingDirectory=/root/agritech
 ExecStart=/root/agritech/venvs/api/bin/uvicorn api.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 2
 Restart=on-failure

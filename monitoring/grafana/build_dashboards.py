@@ -183,57 +183,67 @@ assistant_panels = [
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# DASHBOARD 3: TRAFFIC. Numbers come from Caddy (job "caddy"), the web server every visitor passes through first.
-# Because Caddy sees EVERY request (the website and the API, answered fresh or from the API's cache), these charts
-# show what visitors really experience. Caddy publishes one number per request, kept in a "histogram":
-#   caddy_http_request_duration_seconds_count  = how many requests there have been (we use it to count requests)
-#   caddy_http_request_duration_seconds_bucket = how many finished within 5 ms, 10 ms, 25 ms... (we use it for speed)
-# Each request also carries a "code" label (the reply: 200 = fine, 404 = not found, 503 = too busy) and, with
-# per_host switched on in the Caddyfile, a "host" label (which site: the API or the website).
+# DASHBOARD 3: API TRAFFIC. Numbers come from the API itself (job "api", see api/metrics.py).
+#   planting_api_requests_total               = a counter: one tick per request, labelled with route (which page),
+#                                               status (the reply: 200 fine, 404 not found, 503 busy) and
+#                                               cache (hit = answered from memory, miss = asked the database).
+#   planting_api_request_duration_seconds_*   = a histogram: how many requests finished within 5 ms, 10 ms, 25 ms...
+#                                               (_bucket parts), used for speed charts.
 # histogram_quantile(0.95, ...) answers: "95 out of 100 requests were faster than this".
+# The API counts every request it receives, including the ones answered from its cache.
 # ---------------------------------------------------------------------------------------------------------------
 
-# The metric every traffic chart is built from (one name, so a typo is easy to spot).
-REQ = "caddy_http_request_duration_seconds"
+# The two metric names every traffic chart is built from (one place, so a typo is easy to spot).
+REQ = "planting_api_requests_total"
+DUR = "planting_api_request_duration_seconds"
 
 traffic_panels = [
     # Top row: the hour at a glance.
-    panel(1, "stat", "Requests (1 h)", [query(f"sum(increase({REQ}_count[1h])) or vector(0)", "requests")],
-          0, 0, 6, 4, decimals=0, note="Every request that reached the server in the last hour: the website, the API and the assistant."),
+    panel(1, "stat", "Requests (1 h)", [query(f"sum(increase({REQ}[1h])) or vector(0)", "requests")],
+          0, 0, 6, 4, decimals=0, note="Every request the API received in the last hour, from the website, the assistant and anyone else."),
     # 5xx means OUR side failed (a 4xx would be the visitor asking for something wrong).
-    panel(2, "stat", "Server errors (1 h)", [query(f'sum(increase({REQ}_count{{code=~"5.."}}[1h])) or vector(0)', "errors")],
+    panel(2, "stat", "Server errors (1 h)", [query(f'sum(increase({REQ}{{status=~"5.."}}[1h])) or vector(0)', "errors")],
           6, 0, 6, 4, decimals=0, steps=colours((None, "green"), (1, "yellow"), (20, "red")),
-          note="Replies starting with 5 (500, 502, 503...). These mean the server failed, not the visitor. Should stay at 0."),
+          note="Replies starting with 5 (500, 503...). These mean the server failed, not the visitor. Should stay at 0."),
     # 503 is the polite 'busy, retry in 5 seconds' reply our API gives when the database connections run out.
-    panel(3, "stat", "Busy replies (503, 1 h)", [query(f'sum(increase({REQ}_count{{code="503"}}[1h])) or vector(0)', "busy")],
+    panel(3, "stat", "Busy replies (503, 1 h)", [query(f'sum(increase({REQ}{{status="503"}}[1h])) or vector(0)', "busy")],
           12, 0, 6, 4, decimals=0, steps=colours((None, "green"), (1, "yellow"), (50, "red")),
           note="The API said 'busy, try again in a few seconds' (no free database connection). A few during a spike is "
                "the safety net working; many means we need more capacity."),
     # The slowest 5% of requests: far more honest than the average.
     panel(4, "stat", "Slowest 5% take longer than",
-          [query(f"histogram_quantile(0.95, sum by (le) (rate({REQ}_bucket[5m])))", "p95")],
+          [query(f"histogram_quantile(0.95, sum by (le) (rate({DUR}_bucket[5m])))", "p95")],
           18, 0, 6, 4, unit="s", steps=colours((None, "green"), (0.5, "yellow"), (2, "red")),
           note="95 out of 100 requests were faster than this over the last 5 minutes. Under half a second is good."),
     # Middle row: how busy, and what kind of replies.
-    panel(5, "timeseries", "Requests per second, by site",
-          [query(f"sum by (host) (rate({REQ}_count[2m]))", "{{host}}")], 0, 4, 12, 8, low=0,
-          note="One line per site (the API and the website). If you see a single line called 'No data' or no host name, "
-               "switch on per_host in the Caddyfile (see monitoring/README.md)."),
+    panel(5, "timeseries", "Requests per second, by page",
+          [query(f"sum by (route) (rate({REQ}[2m]))", "{{route}}")], 0, 4, 12, 8, low=0,
+          note="One line per kind of page (for example the city list, or one crop in one city). City and crop names are "
+               "grouped, so /cities/Lagos and /cities/Oulu count as /cities/{city}."),
     panel(6, "timeseries", "Replies by status code",
-          [query(f"sum by (code) (rate({REQ}_count[2m]))", "{{code}}")], 12, 4, 12, 8, low=0,
-          note="200 = fine, 304 = unchanged, 404 = not found, 429 = too many requests, 503 = busy. Watch for any 5xx line."),
-    # Bottom row: speed and errors over time.
+          [query(f"sum by (status) (rate({REQ}[2m]))", "{{status}}")], 12, 4, 12, 8, low=0,
+          note="200 = fine, 404 = not found, 422 = a request the API could not read, 503 = busy. Watch for any 5xx line."),
+    # Bottom rows: speed, failures, cache and the slowest pages.
     panel(7, "timeseries", "Response time (typical, slow, slowest)",
-          [query(f"histogram_quantile(0.50, sum by (le) (rate({REQ}_bucket[5m])))", "typical (50%)", "A"),
-           query(f"histogram_quantile(0.95, sum by (le) (rate({REQ}_bucket[5m])))", "slow (95%)", "B"),
-           query(f"histogram_quantile(0.99, sum by (le) (rate({REQ}_bucket[5m])))", "slowest (99%)", "C")],
+          [query(f"histogram_quantile(0.50, sum by (le) (rate({DUR}_bucket[5m])))", "typical (50%)", "A"),
+           query(f"histogram_quantile(0.95, sum by (le) (rate({DUR}_bucket[5m])))", "slow (95%)", "B"),
+           query(f"histogram_quantile(0.99, sum by (le) (rate({DUR}_bucket[5m])))", "slowest (99%)", "C")],
           0, 12, 12, 8, unit="s", low=0,
-          note="How long visitors wait. During our 500-user test the slow line was about half a second; "
-               "a line climbing for minutes means the server is struggling."),
+          note="How long the API took to answer. Cached answers are very fast, so a rising line usually means the "
+               "database is being asked a lot of new questions."),
     panel(8, "timeseries", "Share of requests that failed",
-          [query(f'(100 * sum(rate({REQ}_count{{code=~"5.."}}[5m])) / sum(rate({REQ}_count[5m]))) or vector(0)', "failed %")],
+          [query(f'(100 * sum(rate({REQ}{{status=~"5.."}}[5m])) / sum(rate({REQ}[5m]))) or vector(0)', "failed %")],
           12, 12, 12, 8, unit="percent", low=0, high=100,
           note="Failed (5xx) requests as a percentage of all requests. Anything above 1% for long deserves a look."),
+    panel(9, "timeseries", "Share answered from the cache",
+          [query(f'(100 * sum(rate({REQ}{{cache="hit"}}[5m])) / sum(rate({REQ}{{cache=~"hit|miss"}}[5m]))) or vector(0)', "from cache %")],
+          0, 20, 12, 8, unit="percent", low=0, high=100,
+          note="Repeated questions are answered from the API's memory for 60 seconds, without asking the database. "
+               "A high share is why the API coped with 500 users at once."),
+    panel(10, "timeseries", "Slowest pages (95% of requests faster than)",
+          [query(f"histogram_quantile(0.95, sum by (le, route) (rate({DUR}_bucket[5m])))", "{{route}}")],
+          12, 20, 12, 8, unit="s", low=0,
+          note="Which page is the slow one. Pages with no recent requests have no line."),
 ]
 
 
@@ -246,7 +256,7 @@ def main():
                                                    ["planting", "server"])),
                         ("assistant.json", dashboard("planting-assistant", "Planting Intelligence: Assistant",
                                                      assistant_panels, ["planting", "assistant"])),
-                        ("traffic.json", dashboard("planting-traffic", "Planting Intelligence: Traffic", traffic_panels,
+                        ("traffic.json", dashboard("planting-traffic", "Planting Intelligence: API traffic", traffic_panels,
                                                    ["planting", "traffic"]))):
         # indent=2 makes the JSON readable; sort_keys makes reruns produce identical files (clean git diffs).
         (OUT / name).write_text(json.dumps(board, indent=2, sort_keys=True) + "\n")
