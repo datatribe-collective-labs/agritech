@@ -1,0 +1,14 @@
+# systemd unit that runs ONE round of alert checks, then exits. The timer next to it starts it every minute.
+[Unit]
+# A readable name shown in logs.
+Description=Planting Intelligence email alert check
+
+[Service]
+# "oneshot" means: run to the end, then stop (it is not a long-running program).
+Type=oneshot
+# Optional: the assistant's own settings (the "-" means "fine if the file is missing"); gives us the same token budget number.
+EnvironmentFile=-/root/assistant.env
+# The alert settings and the Resend key. Never in git.
+EnvironmentFile=/root/alerts.env
+# Run the check with the system Python (it needs no extra packages).
+ExecStart=/usr/bin/python3 /root/agritech/monitoring/alerts/alert_check.py
