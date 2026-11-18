@@ -46,3 +46,33 @@ A Data & AI intelligence pipeline that focuses on relational planting to help fa
   <br>
    <sub><b>Nasa Data Ingestion</b></sub>
 </div>
+
+<div align="center">
+  <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/grafana_dashboard.png?raw=true" />
+  <br>
+   <sub><b>GRAFANA DASHBOARD MONITORING</b></sub>
+</div>
+  <br>
+  <br>
+<div align="center">
+  <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/grafana_server_monitoring.png?raw=true" />
+  <br>
+   <sub><b>GRAFANA SERVER MONITORING</b></sub>
+</div>
+  <br>
+  <br>
+<div align="center">
+  <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/grafana_api_monitoring.png?raw=true" />
+  <br>
+   <sub><b>GRAFANA API REQUEST MONITORING</b></sub>
+</div>
+  <br>
+  <br>
+
+<div align="center">
+  <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/grafana_ai_monitoring.png?raw=true" />
+  <br>
+   <sub><b>GRAFANA AI & HUMAN IN THE LOOP MONITORING</b></sub>
+</div>
+  <br>
+  <br>
