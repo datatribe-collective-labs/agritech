@@ -40,10 +40,10 @@ scrape_configs:
         files:
           - /etc/prometheus/assistant_key
 
-  # JOB 4: Caddy, the web server in front of everything. It counts every request and how long each took,
-  # for the website and the API alike. Caddy's admin address (127.0.0.1:2019) only answers from this same server.
-  # Needs "metrics" switched on in the Caddyfile: see monitoring/README.md.
-  - job_name: caddy
-    # Caddy publishes at the default /metrics path, so no metrics_path is needed.
+  # JOB 4: the planting API itself. It counts every request it receives (page, reply code, time taken).
+  # We call it directly on its own port (8000), so the request never leaves the server. The page answers only
+  # callers that did not come through Caddy (see api/main.py), so visitors on the internet cannot read it.
+  - job_name: api
+    # The API publishes its numbers at /metrics, which is Prometheus's default path, so none is needed here.
     static_configs:
-      - targets: ["127.0.0.1:2019"]
+      - targets: ["127.0.0.1:8000"]
