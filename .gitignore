@@ -227,3 +227,6 @@ ml/saved_models/suitability_runs/
 
 # Patch files made for sharing, never committed
 *.patch
+
+# Patch files made for sharing, never committed
+*.patch
