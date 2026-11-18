@@ -39,8 +39,33 @@ class Orchestrator:
         # Callback told how many tokens each call used (feeds the budget).
         self.on_tokens = on_tokens or (lambda tokens: None)
 
-    def _run_tool(self, call, calls_so_far: int) -> ToolResult:
+    @staticmethod
+    def _scientific_name(arguments: dict, card: dict) -> dict:
+        """Swap a crop's common name (e.g. 'Maize / Corn') for its scientific name (e.g. 'Zea mays').
+
+        The data service only understands scientific names, and the model sometimes copies the common name.
+        """
+        # Nothing to fix when the call names no crop.
+        name = arguments.get("species")
+        # Not a crop lookup (or not text): leave it alone.
+        if not isinstance(name, str):
+            # Return the arguments unchanged.
+            return arguments
+        # Every crop on the card: the farmer's own crop, or the whole city ranking.
+        crops = [card] if card.get("species") else card.get("plants", [])
+        # Look for a crop whose common name matches (ignoring capital letters and extra spaces).
+        for crop in crops:
+            # Compare the common names in a forgiving way.
+            if crop.get("common_name") and crop["common_name"].strip().lower() == name.strip().lower():
+                # Same call, with the scientific name instead.
+                return {**arguments, "species": crop["species"]}
+        # No match: keep what the model asked for.
+        return arguments
+
+    def _run_tool(self, call, calls_so_far: int, card: dict = None) -> ToolResult:
         """Check one tool request, run it, and clean what comes back."""
+        # Fix a common crop name into its scientific name before anything else looks at the call.
+        call.arguments = self._scientific_name(call.arguments, card or {})
         # Ask the action rails whether this call is allowed.
         refusal = self.guardrails.check_tool_call(call.name, call.arguments, self.registry, calls_so_far)
         # The rails said no.
@@ -107,7 +132,7 @@ class Orchestrator:
             # Run each requested tool and feed the result back.
             for call in reply.tool_calls:
                 # Check and run the tool.
-                result = self._run_tool(call, len(sources))
+                result = self._run_tool(call, len(sources), card)
                 # Note which source was used.
                 sources.append(call.name)
                 # Successful data becomes a fact the answer may use.
