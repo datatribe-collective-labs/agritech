@@ -54,6 +54,33 @@ def route_name(path: str) -> str:
     # Unknown addresses all share one line, so a scanner cannot flood us with new lines.
     return "other"
 
+# Replies we expect to see, and the three cache states. Used only to create the lines at 0 (see below).
+STATUSES = ("200", "404", "405", "422", "500", "503")
+CACHE_STATES = ("hit", "miss", "none")
+
+
+def _start_at_zero() -> None:
+    """Create every expected line at 0 when the API starts.
+
+    WHY: Prometheus's increase() measures growth BETWEEN two readings. A line that first appears already at 1 has
+    no earlier reading, so that first request would never be counted, and the very first server error would be
+    invisible. Creating the lines at 0 first means every request, and every first error, is counted.
+    """
+    # Every page pattern we know, plus the shared 'other' line.
+    for route in [name for _, name in ROUTES] + ["other"]:
+        # Every reply code we expect.
+        for status in STATUSES:
+            # Every cache state.
+            for cache in CACHE_STATES:
+                # Asking for the line creates it at 0 (it adds nothing to the count).
+                REQUESTS.labels(route, status, cache)
+        # The speed histogram gets its line for this page too.
+        DURATION.labels(route)
+
+
+# Run once, when this file is first loaded.
+_start_at_zero()
+
 
 class MetricsMiddleware:
     """Wraps the whole API: times every request and counts it. Added last, so it also sees cached answers."""

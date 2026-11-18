@@ -87,3 +87,14 @@ def test_reading_the_metrics_page_is_not_counted_and_never_cached(tmp_path):
     assert "x-cache" not in first.headers and "x-cache" not in second.headers
     # And the page does not appear in its own numbers.
     assert 'route="other"' not in second.text or "/metrics" not in second.text
+
+
+def test_every_expected_line_exists_at_zero_before_any_request():
+    # A line that has never been used still exists, with the value 0 (not 'missing').
+    # This is what lets Prometheus's increase() count the very first request or error.
+    assert _count(route="/cities/{city}/plants/{crop}", status="503", cache="miss") >= 0
+    # get_sample_value returns None for a line that does not exist at all, so ask for it directly.
+    assert REGISTRY.get_sample_value("planting_api_requests_total",
+                                     {"route": "/plants", "status": "500", "cache": "none"}) is not None
+    # The speed histogram also has its lines ready for every page.
+    assert REGISTRY.get_sample_value("planting_api_request_duration_seconds_count", {"route": "/model"}) is not None
