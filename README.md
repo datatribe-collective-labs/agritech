@@ -48,10 +48,11 @@ A Data & AI intelligence pipeline that focuses on relational planting to help fa
 </div>
   <br>
   <br>
+### Data Model
 <div align="center">
   <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/data_model.png?raw=true" />
   <br>
-   <sub><b>GRAFANA API REQUEST MONITORING</b></sub>
+   <sub><b>Model Design</b></sub>
 </div>
   <br>
   <br>
