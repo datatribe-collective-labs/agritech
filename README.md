@@ -69,7 +69,9 @@ Two Airflow DAGs handle data loading, separated by how frequently the underlying
 1. **Planting Intelligence Pipeline:** Runs daily at 06:00. It fetches plant, soil, weather, and water data in parallel, then logs a summary. Each task retries twice, with a five-minute delay between attempts. Catchup is disabled to prevent a restart from triggering a flood of historical runs.
 
 2. **NASA Climate History Pipeline:** Runs every Sunday at 03:00. It refreshes ten years of NASA POWER climate history, with a two-hour execution timeout. Since historical climate data changes slowly, weekly updates are sufficient. This also ensures that the model retraining scheduled for 09:00 on Sundays uses a refreshed climate dataset that has completed several hours earlier.
-The warehouse is a classic STAR schema with one fact table and six dimensions. The fact table has a grain of one row per plant, while the dimension tables define entities like locations, plant species, dates, soil condition, water condition, and weather condition. 
+The warehouse is a classic STAR schema with one fact table and six dimensions.
+<br>
+The fact table has a grain of one row per plant, while the dimension tables define entities like locations, plant species, dates, soil condition, water condition, and weather condition. 
 The data mart which supports machine learning consists of 4 tables covering dominant annual features, seasonal features, planting features, and city suitability. It also supports the API with plant profiles as well as city companions derived from the haversine distance, which ranks cities per plant occurrence and keeps the nearest plant within 500 kilometers.
 The model makes use of a defensive approach via more than 80 generic tests across staging, intermediate, marts, warehouse, and seeds, and ensures that a failing test stops the build before bad data reaches the marts. The weekly model retrain begins with its own data
 health check for the right amount of cities, crops, no duplicates, and a fingerprint check that skips the run if nothing changed.
