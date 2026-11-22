@@ -20,6 +20,7 @@ Every second, the world loses roughly four football fields of healthy soil. By 2
 
 A Data & AI intelligence pipeline that focuses on relational planting to help farmers with paired-planting choices for soil preservation. It collects plant, soil, weather, and water data from public APIs, orchestrated by Apache Airflow and stores data in a dockerized postgres database environment. The solution integrates data engineering, analytics, feature engineering, ML/AI infrastructures, delivered through a backend feature and a user-friendly frontend interface.
 
+### System Design
 <div align="center">
   <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/system-design.png?raw=true" />
   <br>
