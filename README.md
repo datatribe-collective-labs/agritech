@@ -64,11 +64,11 @@ The model serves three kinds of readers from one lineage:
 <br>
 The ingestion phase pulls from 5 public sources for information on plants, soil, water, and weather. NASA climate data covers a city's dominant climatic conditions over a 10-year period. This phase also collects information about the time of ingestion so any downstream
 row can be traced to the load that produced it. The model also incorporates the Type 2 snapshots, which add history tracking how a city's soil values changed over time.
-Two Airflow DAGs do the loading, split by how fast the data changes:
-<ol>
-  <li><strong>Planting Intelligence Pipeline:</strong> Runs daily at 06:00. It fetches plant, soil, weather, and water data in parallel, then logs a summary. Each task retries twice, with a five-minute delay between attempts. Catchup is disabled to prevent a restart from triggering a flood of historical runs.</li>
-  <li><strong>Runs every Sunday at 03:00. It refreshes ten years of NASA POWER climate history, with a two-hour execution timeout. Since historical climate data changes slowly, weekly updates are sufficient. This also ensures that the model retraining scheduled for 09:00 on Sundays uses a refreshed climate dataset that has completed several hours earlier.</li>
-</ol>
+Two Airflow DAGs handle data loading, separated by how frequently the underlying data changes:
+
+1. **Planting Intelligence Pipeline:** Runs daily at 06:00. It fetches plant, soil, weather, and water data in parallel, then logs a summary. Each task retries twice, with a five-minute delay between attempts. Catchup is disabled to prevent a restart from triggering a flood of historical runs.
+
+2. **NASA Climate History Pipeline:** Runs every Sunday at 03:00. It refreshes ten years of NASA POWER climate history, with a two-hour execution timeout. Since historical climate data changes slowly, weekly updates are sufficient. This also ensures that the model retraining scheduled for 09:00 on Sundays uses a refreshed climate dataset that has completed several hours earlier.
 The warehouse is a classic STAR schema with one fact table and six dimensions. The fact table has a grain of one row per plant, while the dimension tables define entities like locations, plant species, dates, soil condition, water condition, and weather condition. 
 The data mart which supports machine learning consists of 4 tables covering dominant annual features, seasonal features, planting features, and city suitability. It also supports the API with plant profiles as well as city companions derived from the haversine distance, which ranks cities per plant occurrence and keeps the nearest plant within 500 kilometers.
 The model makes use of a defensive approach via more than 80 generic tests across staging, intermediate, marts, warehouse, and seeds, and ensures that a failing test stops the build before bad data reaches the marts. The weekly model retrain begins with its own data
