@@ -52,9 +52,9 @@ A Data & AI intelligence pipeline that focuses on relational planting to help fa
 ### Data Model
 
 The model serves three kinds of readers from one lineage: 
-- a REST API that needs fast and simple lookups such as plant profiles and companion crops, 
-- a machine-learning job that needs one flat, labelled table with a crop-by-city grain, 
-- and analysts who need a clean star schema for routine data querying and planting intelligence
+1.  a REST API that needs fast and simple lookups such as plant profiles and companion crops,
+2.  a machine-learning job that needs one flat, labelled table with a crop-by-city grain,
+3.  and analysts who need a clean star schema for routine data querying and planting intelligence
 
 <div align="center">
   <img src="https://github.com/datatribe-collective-labs/agritech/blob/main/images/data_model.png?raw=true" />
@@ -65,8 +65,8 @@ The model serves three kinds of readers from one lineage:
 The ingestion phase pulls from 5 public sources for information on plants, soil, water, and weather. NASA climate data covers a city's dominant climatic conditions over a 10-year period. This phase also collects information about the time of ingestion so any downstream
 row can be traced to the load that produced it. The model also incorporates the Type 2 snapshots, which add history tracking how a city's soil values changed over time.
 Two Airflow DAGs do the loading, split by how fast the data changes:
-- A planting intelligence pipeline, which runs daily at 06:00, fetches plants, soil, weather, and water in parallel, then logs a summary. Each task retries twice, five minutes apart, and catchup is off so a restart never triggers a flood of back-filled runs.
-- A planting nasa history, which runs weekly on Sundays at 03:00, refreshes the ten-year NASA POWER climate history, with a two-hour execution timeout. This decision is borne out of the fact that climate history changes slowly, so a model retrain at 09:00 on the same Sundays therefore always sees a fresh climate refresh that finished hours earlier.
+1. A planting intelligence pipeline, which runs daily at 06:00, fetches plants, soil, weather, and water in parallel, then logs a summary. Each task retries twice, five minutes apart, and catchup is off so a restart never triggers a flood of back-filled runs.
+2. A planting nasa history, which runs weekly on Sundays at 03:00, refreshes the ten-year NASA POWER climate history, with a two-hour execution timeout. This decision is borne out of the fact that climate history changes slowly, so a model retrain at 09:00 on the same Sundays therefore always sees a fresh climate refresh that finished hours earlier.
 The warehouse is a classic STAR schema with one fact table and six dimensions. The fact table has a grain of one row per plant, while the dimension tables define entities like locations, plant species, dates, soil condition, water condition, and weather condition. 
 The data mart which supports machine learning consists of 4 tables covering dominant annual features, seasonal features, planting features, and city suitability. It also supports the API with plant profiles as well as city companions derived from the haversine distance, which ranks cities per plant occurrence and keeps the nearest plant within 500 kilometers.
 The model makes use of a defensive approach via more than 80 generic tests across staging, intermediate, marts, warehouse, and seeds, and ensures that a failing test stops the build before bad data reaches the marts. The weekly model retrain begins with its own data
